@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+client_data/
+ati_kb/vectors/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+Run.txt
+

@@ -1,0 +1,94 @@
+AWESOME TECHNOLOGIES INC. (ATI) — Service Catalogue
+
+ATI is a third-party technology service provider specializing in mortgage automation, custom software development, and digital solutions for mortgage lenders, brokers, and loan officers.
+
+CONTACT: support@awesometechinc.com | 877-284-4968
+WEBSITE: https://awesometechinc.com
+
+=== MORTGAGE WEBSITE DEVELOPMENT SERVICES ===
+ATI provides mortgage website development services that blend advanced technology with exceptional design. We create websites for mortgage companies, brokers, and loan officers with intuitive designs that guide users through the entire lending process.
+
+Features include:
+- Responsive design for all devices
+- Lead generation tools and contact forms
+- Mortgage calculators
+- Secure borrower portals
+- Loan application form integration
+- CRM and LOS integration capabilities
+- SEO optimization and performance tuning
+- Third-party service integration (payment gateways, analytics)
+
+Workflow: Discovery → Wireframes & Design → Development → Integration → Testing → Deployment → Ongoing Support
+
+=== MORTGAGE WEBSITE DESIGN & BRANDING SERVICES ===
+ATI provides mortgage branding and website design services to help mortgage companies establish a strong online presence.
+
+Services include:
+- Logo design and brand identity
+- Graphic design and visual assets
+- Content creation for mortgage industry
+- Brand strategy consulting
+- User-friendly web design focused on conversion
+- Lead generation optimization
+- Marketing and sales outcome improvement
+
+=== CUSTOM MORTGAGE DEVELOPMENT ===
+ATI builds bespoke custom mortgage websites and software tailored to each client's brand identity.
+
+Capabilities:
+- Cross-device compatibility
+- Customizable menus, icons, colors, and branding
+- Lead generation tools and automation
+- Solutions for loan officers, mortgage brokers, agents, and lending companies
+- Brand identity replication across digital platforms
+
+=== MORTGAGE AUTOMATION / RPA / API INTEGRATION ===
+ATI helps mortgage lenders automate and optimize loan origination processes.
+
+Technologies: RPA (Robotic Process Automation), API integrations, AI-powered automation, custom workflow automation.
+
+Benefits:
+- Reduce manual errors
+- Accelerate loan closing timelines
+- Improve operational scalability
+- Real-time visibility into operations
+- Streamline processes from origination to analytics
+
+=== LOS IMPLEMENTATION & SUPPORT ===
+ATI provides implementation, customization, and maintenance for three major Loan Origination Systems:
+
+1. Encompass (by ICE Mortgage Technology)
+2. BytePro
+3. MeridianLink
+
+Services include platform implementation, customization, integration, and ongoing support.
+
+=== CRM & LOS INTEGRATION ===
+ATI specializes in integrating Loan Origination Systems with CRM platforms to create unified lending workflows. Integration enables seamless data flow between sales, marketing, and loan processing teams.
+
+=== CUSTOM SOFTWARE DEVELOPMENT ===
+ATI provides customized software development for all types of lending:
+
+- Loan management systems
+- Commercial lending software
+- Construction loan software
+- Mortgage homepage applications
+- Disclosure management systems
+- Automated underwriting tools
+- Document management solutions
+
+All systems are customized per client specifications and requirements.
+
+=== CONSULTING & SUPPORT ===
+- Free consultation and demo available
+- Project scoping and cost proposals
+- NDA and formal engagement process
+- Ongoing maintenance and support
+- Client portal: https://ati4you.atlassian.net/servicedesk/
+
+=== INDUSTRIES SERVED ===
+- Mortgage lenders (large institutions and small companies)
+- Mortgage brokers
+- Loan officers
+- Commercial lending institutions
+- Construction lending companies
