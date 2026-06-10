@@ -9,10 +9,12 @@
   <link href="/static/css/theme.css" rel="stylesheet">
   <link href="/static/css/settings.css" rel="stylesheet">
   <link href="/static/css/site.css" rel="stylesheet">
+  <link href="/static/css/transitions.css" rel="stylesheet">
 </head>
 <body data-page="chat">
+  <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
   <div class="chat-layout">
-    <aside class="sidebar">
+    <aside class="sidebar" id="chatSidebar">
       <div class="sidebar-brand">Client Onboarding Agent</div>
       <div class="sidebar-header">
         <button id="newChatBtn" class="btn-new-chat">+ New chat</button>
@@ -53,13 +55,12 @@
       </div>
 
       <div class="chat-topbar">
-        <div>
+        <button type="button" id="sidebarToggle" class="sidebar-toggle" aria-label="Open menu">
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/></svg>
+        </button>
+        <div class="chat-topbar-info">
           <div class="chat-topbar-title">Client Onboarding Agent</div>
           <div class="chat-status" id="status">Connecting...</div>
-        </div>
-        <div class="chat-topbar-actions">
-          <button type="button" id="generateBriefBtn" class="btn-generate-brief d-none">Generate brief</button>
-          <a id="downloadBrief" href="#" class="btn-download d-none" download>Download brief</a>
         </div>
       </div>
 
@@ -77,6 +78,11 @@
 
       <div class="suggestion-chips" id="chips"></div>
 
+      <div id="composerActions" class="chat-composer-actions d-none">
+        <button type="button" id="generateBriefBtn" class="btn-composer-action btn-composer-primary">Generate brief</button>
+        <a id="downloadBrief" href="#" class="btn-composer-action btn-composer-secondary d-none" download>Download brief</a>
+      </div>
+
       <div class="chat-input-area">
         <div class="input-wrapper">
           <label class="attach-btn" title="Attach file">
@@ -91,8 +97,9 @@
       </div>
     </main>
   </div>
-  <script src="/static/js/theme.js?v=3.4.0"></script>
-  <script src="/static/js/settings.js?v=3.4.0"></script>
+  <script src="/static/js/theme.js?v=3.5.0"></script>
+  <script src="/static/js/transitions.js?v=3.5.0"></script>
+  <script src="/static/js/settings.js?v=3.5.0"></script>
   <script src="/static/js/api.js?v=3.2.1"></script>
   <script src="/static/js/chat.js?v=3.5.0"></script>
 </body>

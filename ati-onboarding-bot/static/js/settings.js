@@ -1,10 +1,13 @@
 const PREFERENCE_KEYS = [
   "ati_theme",
   "ati_chat_density",
+  "ati_chat_width",
   "ati_send_on_enter",
   "ati_show_chips",
   "ati_show_typing",
+  "ati_auto_scroll",
   "ati_reduce_motion",
+  "ati_ui_animations",
 ];
 
 const SETTINGS = {
@@ -30,6 +33,14 @@ const SETTINGS = {
       } else {
         document.documentElement.removeAttribute("data-chat-density");
       }
+    },
+  },
+  chatWidth: {
+    key: "ati_chat_width",
+    default: "wide",
+    parse: (v) => (["narrow", "standard", "wide", "full"].includes(v) ? v : "wide"),
+    apply(value) {
+      document.documentElement.setAttribute("data-chat-width", value);
     },
   },
   sendOnEnter: {
@@ -60,6 +71,12 @@ const SETTINGS = {
       }
     },
   },
+  autoScroll: {
+    key: "ati_auto_scroll",
+    default: true,
+    parse: (v) => v !== "false",
+    apply() {},
+  },
   reduceMotion: {
     key: "ati_reduce_motion",
     default: false,
@@ -72,6 +89,19 @@ const SETTINGS = {
         document.documentElement.setAttribute("data-reduce-motion", "true");
       } else {
         document.documentElement.removeAttribute("data-reduce-motion");
+      }
+      if (typeof applyUiAnimationsAttribute === "function") {
+        applyUiAnimationsAttribute();
+      }
+    },
+  },
+  uiAnimations: {
+    key: "ati_ui_animations",
+    default: true,
+    parse: (v) => v !== "false",
+    apply() {
+      if (typeof applyUiAnimationsAttribute === "function") {
+        applyUiAnimationsAttribute();
       }
     },
   },
@@ -114,6 +144,9 @@ function applyAllSettings() {
   Object.keys(SETTINGS).forEach((name) => {
     SETTINGS[name].apply(getSetting(name));
   });
+  if (typeof applyUiAnimationsAttribute === "function") {
+    applyUiAnimationsAttribute();
+  }
 }
 
 function isChatPage() {
@@ -148,9 +181,25 @@ function buildPanelHtml() {
                 <button type="button" data-value="compact">Compact</button>
               </div>
             </div>
+            <div class="settings-row settings-row-stack">
+              <span class="settings-label">Chat width</span>
+              <div class="settings-segmented settings-segmented--wrap" data-setting="chatWidth" role="group" aria-label="Chat width">
+                <button type="button" data-value="narrow">Narrow</button>
+                <button type="button" data-value="standard">Standard</button>
+                <button type="button" data-value="wide">Wide</button>
+                <button type="button" data-value="full">Full</button>
+              </div>
+            </div>
           </section>
           <section class="settings-section${showChat ? "" : " d-none"}" id="settingsChatSection">
             <h3 class="settings-section-title">Chat</h3>
+            <div class="settings-row">
+              <span class="settings-label">Auto-scroll to new messages</span>
+              <label class="settings-toggle">
+                <input type="checkbox" data-setting="autoScroll">
+                <span class="settings-toggle-track" aria-hidden="true"></span>
+              </label>
+            </div>
             <div class="settings-row">
               <span class="settings-label">Send on Enter</span>
               <label class="settings-toggle">
@@ -182,6 +231,14 @@ function buildPanelHtml() {
                 <span class="settings-toggle-track" aria-hidden="true"></span>
               </label>
             </div>
+            <div class="settings-row">
+              <span class="settings-label">Interface animations</span>
+              <label class="settings-toggle">
+                <input type="checkbox" data-setting="uiAnimations">
+                <span class="settings-toggle-track" aria-hidden="true"></span>
+              </label>
+            </div>
+            <p class="settings-hint">Animations are off when Reduce motion is enabled.</p>
           </section>
           <div class="settings-actions">
             <button type="button" class="btn-secondary-custom settings-reset" id="settingsResetBtn">Reset all preferences</button>
@@ -255,6 +312,7 @@ function openSettingsPanel() {
 
   syncPanelControls();
   overlay.classList.remove("d-none");
+  overlay.classList.add("settings-overlay--visible");
   overlay.setAttribute("aria-hidden", "false");
   document.body.classList.add("settings-open");
   overlay.querySelector(".settings-drawer")?.focus();
@@ -263,6 +321,7 @@ function openSettingsPanel() {
 function closeSettingsPanel() {
   const overlay = document.getElementById("settingsOverlay");
   if (!overlay) return;
+  overlay.classList.remove("settings-overlay--visible");
   overlay.classList.add("d-none");
   overlay.setAttribute("aria-hidden", "true");
   document.body.classList.remove("settings-open");

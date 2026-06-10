@@ -50,6 +50,16 @@ function clearMessages() {
   updateEmptyState();
 }
 
+function shouldAutoScroll() {
+  return typeof getSetting !== "function" || getSetting("autoScroll") !== false;
+}
+
+function scrollMessagesToBottom() {
+  if (!shouldAutoScroll()) return;
+  const container = document.getElementById("messages");
+  if (container) container.scrollTop = container.scrollHeight;
+}
+
 function appendMessage(role, content) {
   if (!content?.trim()) return;
   const container = document.getElementById("messages");
@@ -57,7 +67,8 @@ function appendMessage(role, content) {
   row.className = `msg-row ${role}`;
   row.innerHTML = `<div class="msg-bubble">${linkify(content)}</div>`;
   container.appendChild(row);
-  container.scrollTop = container.scrollHeight;
+  if (typeof animateMessageRow === "function") animateMessageRow(row);
+  scrollMessagesToBottom();
   updateEmptyState();
 }
 
@@ -97,6 +108,16 @@ function renderChips(suggestions) {
   });
 }
 
+function updateComposerActionsVisibility() {
+  const wrapper = document.getElementById("composerActions");
+  const genBtn = document.getElementById("generateBriefBtn");
+  const dlBtn = document.getElementById("downloadBrief");
+  if (!wrapper) return;
+  const showGen = genBtn && !genBtn.classList.contains("d-none");
+  const showDl = dlBtn && !dlBtn.classList.contains("d-none");
+  wrapper.classList.toggle("d-none", !showGen && !showDl);
+}
+
 function updateDownloadBtn(data) {
   const btn = document.getElementById("downloadBrief");
   if (!btn) return;
@@ -108,6 +129,7 @@ function updateDownloadBtn(data) {
   } else {
     btn.classList.add("d-none");
   }
+  updateComposerActionsVisibility();
 }
 
 function updateGenerateBriefBtn(data) {
@@ -118,6 +140,29 @@ function updateGenerateBriefBtn(data) {
     btn.disabled = waiting;
   } else {
     btn.classList.add("d-none");
+  }
+  updateComposerActionsVisibility();
+}
+
+function openSidebar() {
+  document.getElementById("chatSidebar")?.classList.add("sidebar-drawer-open");
+  document.getElementById("sidebarBackdrop")?.classList.add("sidebar-backdrop--visible");
+  document.body.classList.add("sidebar-open");
+}
+
+function closeSidebar() {
+  document.getElementById("chatSidebar")?.classList.remove("sidebar-drawer-open");
+  document.getElementById("sidebarBackdrop")?.classList.remove("sidebar-backdrop--visible");
+  document.body.classList.remove("sidebar-open");
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById("chatSidebar");
+  if (!sidebar) return;
+  if (sidebar.classList.contains("sidebar-drawer-open")) {
+    closeSidebar();
+  } else {
+    openSidebar();
   }
 }
 
@@ -249,7 +294,7 @@ function handleServerMessage(data) {
     const lastText = last?.textContent || "";
     if (lastText.includes(CONSENT_PLACEHOLDER) && !data.content.includes(CONSENT_PLACEHOLDER)) {
       last.querySelector(".msg-bubble").innerHTML = linkify(data.content);
-      container.scrollTop = container.scrollHeight;
+      scrollMessagesToBottom();
       updateEmptyState();
     } else {
       appendMessage("assistant", data.content);
@@ -431,7 +476,10 @@ function renderSessionRow(s) {
   label.type = "button";
   label.className = "session-label";
   label.textContent = getChatDisplayName(s);
-  label.addEventListener("click", () => openSession(s.session_id, false));
+  label.addEventListener("click", () => {
+    closeSidebar();
+    openSession(s.session_id, false);
+  });
 
   const actions = document.createElement("div");
   actions.className = "session-actions";
@@ -537,7 +585,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("adminLink")?.classList.remove("d-none");
   }
 
-  document.getElementById("newChatBtn")?.addEventListener("click", newSession);
+  document.getElementById("sidebarToggle")?.addEventListener("click", toggleSidebar);
+  document.getElementById("sidebarBackdrop")?.addEventListener("click", closeSidebar);
+  document.getElementById("newChatBtn")?.addEventListener("click", () => {
+    closeSidebar();
+    newSession();
+  });
   document.getElementById("sessionSearch")?.addEventListener("input", (e) => {
     sessionSearchTerm = e.target.value;
     clearTimeout(sessionSearchTimer);

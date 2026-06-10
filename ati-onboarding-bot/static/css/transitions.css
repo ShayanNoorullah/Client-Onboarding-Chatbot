@@ -1,0 +1,68 @@
+html[data-ui-animations="true"] body.page-enter {
+  animation: pageEnter 0.2s ease forwards;
+}
+
+html[data-ui-animations="true"] body.page-exit {
+  animation: pageExit 0.12s ease forwards;
+}
+
+html[data-ui-animations="true"] .msg-row.msg-enter {
+  animation: msgEnter 0.2s ease forwards;
+}
+
+html[data-ui-animations="true"] .settings-overlay:not(.d-none) .settings-backdrop {
+  animation: fadeIn 0.2s ease forwards;
+}
+
+html[data-ui-animations="true"] .settings-overlay.settings-overlay--visible .settings-drawer {
+  animation: drawerSlideIn 0.25s ease forwards;
+}
+
+html[data-ui-animations="true"] .consent-overlay:not(.d-none) {
+  animation: fadeIn 0.2s ease forwards;
+}
+
+html[data-reduce-motion="true"] body.page-enter,
+html[data-reduce-motion="true"] body.page-exit,
+html[data-reduce-motion="true"] .msg-row.msg-enter,
+html[data-ui-animations="false"] body.page-enter,
+html[data-ui-animations="false"] body.page-exit,
+html[data-ui-animations="false"] .msg-row.msg-enter {
+  animation: none;
+}
+
+html[data-reduce-motion="true"] .sidebar,
+html[data-ui-animations="false"] .sidebar {
+  transition: none;
+}
+
+@keyframes pageEnter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pageExit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes msgEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes drawerSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
