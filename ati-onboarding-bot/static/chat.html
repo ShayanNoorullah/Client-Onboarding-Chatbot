@@ -33,6 +33,25 @@
     </aside>
 
     <main class="chat-main">
+      <div id="consentOverlay" class="consent-overlay d-none" aria-hidden="true">
+        <div class="consent-dialog" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
+          <h2 id="consentTitle">Privacy &amp; Consent</h2>
+          <p class="consent-intro">
+            Before we begin, Awesome Technologies Inc. needs your consent to collect and use
+            the information you share during this conversation to prepare your project brief.
+          </p>
+          <div id="consentSections" class="consent-sections"></div>
+          <p class="consent-contact" id="consentContact"></p>
+          <p class="consent-instruction">
+            To continue, type <strong>I agree</strong> in the field below.
+          </p>
+          <input type="text" id="consentInput" class="consent-input" placeholder="I agree" autocomplete="off" spellcheck="false">
+          <p id="consentError" class="consent-error d-none"></p>
+          <button type="button" id="consentSubmit" class="btn-primary-custom consent-submit" disabled>Continue</button>
+          <a href="/privacy.html" class="consent-policy-link" target="_blank" rel="noopener">Read full privacy policy</a>
+        </div>
+      </div>
+
       <div class="chat-topbar">
         <div>
           <div class="chat-topbar-title">Client Onboarding Agent</div>
@@ -75,6 +94,6 @@
   <script src="/static/js/theme.js?v=3.4.0"></script>
   <script src="/static/js/settings.js?v=3.4.0"></script>
   <script src="/static/js/api.js?v=3.2.1"></script>
-  <script src="/static/js/chat.js?v=3.4.0"></script>
+  <script src="/static/js/chat.js?v=3.5.0"></script>
 </body>
 </html>

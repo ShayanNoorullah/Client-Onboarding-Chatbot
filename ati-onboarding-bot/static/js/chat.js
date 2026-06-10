@@ -2,8 +2,11 @@ let currentUser = null;
 let sessionId = null;
 let ws = null;
 let waiting = false;
+let consentGiven = false;
 let sessionSearchTerm = "";
 let sessionSearchTimer = null;
+
+const CONSENT_PHRASE = "i agree";
 
 function sessionStorageKey(userId) {
   return `ati_session_id_${userId}`;
@@ -118,6 +121,102 @@ function updateGenerateBriefBtn(data) {
   }
 }
 
+function isConsentPhrase(text) {
+  return (text || "").trim().toLowerCase() === CONSENT_PHRASE;
+}
+
+function showConsentError(message) {
+  const err = document.getElementById("consentError");
+  if (!err) return;
+  err.textContent = message || 'Please type exactly "I agree" to continue.';
+  err.classList.remove("d-none");
+}
+
+function clearConsentError() {
+  const err = document.getElementById("consentError");
+  if (err) {
+    err.textContent = "";
+    err.classList.add("d-none");
+  }
+}
+
+function updateConsentState(data) {
+  consentGiven = Boolean(data.consent_given);
+  const overlay = document.getElementById("consentOverlay");
+  const chatMain = document.querySelector(".chat-main");
+  if (!overlay) return;
+
+  if (consentGiven) {
+    overlay.classList.add("d-none");
+    overlay.setAttribute("aria-hidden", "true");
+    chatMain?.classList.remove("consent-blocked");
+    clearConsentError();
+  } else {
+    overlay.classList.remove("d-none");
+    overlay.setAttribute("aria-hidden", "false");
+    chatMain?.classList.add("consent-blocked");
+    setTimeout(() => document.getElementById("consentInput")?.focus(), 50);
+  }
+  setSendEnabled(ws?.readyState === WebSocket.OPEN && consentGiven && !waiting);
+}
+
+async function loadConsentContent() {
+  const sectionsEl = document.getElementById("consentSections");
+  const contactEl = document.getElementById("consentContact");
+  if (!sectionsEl) return;
+
+  try {
+    const res = await fetch("/api/public/privacy");
+    const data = await res.json();
+    const sections = (data.sections || []).slice(0, 4);
+    sectionsEl.innerHTML = sections.map((s) => `
+      <div class="consent-section-block">
+        <h3>${s.title || ""}</h3>
+        <p>${(s.body || "").replace(/\n/g, " ")}</p>
+      </div>
+    `).join("");
+
+    const contact = data.contact || {};
+    if (contactEl && (contact.email || contact.phone)) {
+      contactEl.innerHTML = [
+        contact.email ? `<strong>Email:</strong> ${contact.email}` : "",
+        contact.phone ? `<strong>Phone:</strong> ${contact.phone}` : "",
+      ].filter(Boolean).join(" · ");
+    }
+  } catch {
+    sectionsEl.innerHTML = `
+      <div class="consent-section-block">
+        <p>We collect your name, project details, and any files you upload solely to prepare your project brief. We do not sell your data.</p>
+      </div>
+    `;
+  }
+}
+
+function syncConsentSubmitState() {
+  const input = document.getElementById("consentInput");
+  const btn = document.getElementById("consentSubmit");
+  if (!input || !btn) return;
+  btn.disabled = !isConsentPhrase(input.value);
+}
+
+function submitConsent() {
+  const input = document.getElementById("consentInput");
+  const value = input?.value || "";
+  if (!isConsentPhrase(value)) {
+    showConsentError('Please type exactly "I agree" to continue.');
+    return;
+  }
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    showConsentError("Not connected. Please wait and try again.");
+    return;
+  }
+  clearConsentError();
+  waiting = true;
+  const btn = document.getElementById("consentSubmit");
+  if (btn) btn.disabled = true;
+  ws.send(JSON.stringify({ action: "consent", agreement: value.trim() }));
+}
+
 function updateStatus(data) {
   const status = document.getElementById("status");
   if (!status) return;
@@ -161,6 +260,11 @@ function handleServerMessage(data) {
   updateDownloadBtn(data);
   updateGenerateBriefBtn(data);
   updateStatus(data);
+  updateConsentState(data);
+  waiting = false;
+  syncConsentSubmitState();
+  const consentBtn = document.getElementById("consentSubmit");
+  if (consentBtn) consentBtn.disabled = !isConsentPhrase(document.getElementById("consentInput")?.value);
 }
 
 async function loadSessionHistory(id) {
@@ -170,6 +274,7 @@ async function loadSessionHistory(id) {
     updateDownloadBtn(data);
     updateGenerateBriefBtn(data);
     updateStatus(data);
+    updateConsentState(data);
     return data;
   } catch {
     return null;
@@ -190,7 +295,23 @@ function connectWS() {
   };
 
   ws.onmessage = (ev) => {
-    try { handleServerMessage(JSON.parse(ev.data)); } catch (e) { console.error(e); }
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.type === "consent_error") {
+        waiting = false;
+        showConsentError(data.message);
+        syncConsentSubmitState();
+        return;
+      }
+      if (data.type === "consent_required") {
+        waiting = false;
+        updateConsentState(data);
+        return;
+      }
+      handleServerMessage(data);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   ws.onclose = () => {
@@ -207,7 +328,7 @@ function connectWS() {
 
 async function sendMessage(text) {
   const trimmed = (text || "").trim();
-  if (!trimmed || waiting || !ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!trimmed || waiting || !consentGiven || !ws || ws.readyState !== WebSocket.OPEN) return;
   appendMessage("user", trimmed);
   waiting = true;
   showTyping(true);
@@ -452,6 +573,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     e.target.value = "";
   });
 
+  document.getElementById("consentInput")?.addEventListener("input", () => {
+    clearConsentError();
+    syncConsentSubmitState();
+  });
+  document.getElementById("consentInput")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && isConsentPhrase(e.target.value)) {
+      e.preventDefault();
+      submitConsent();
+    }
+  });
+  document.getElementById("consentSubmit")?.addEventListener("click", submitConsent);
+
+  await loadConsentContent();
   updateEmptyState();
   await initSessionForUser();
 });

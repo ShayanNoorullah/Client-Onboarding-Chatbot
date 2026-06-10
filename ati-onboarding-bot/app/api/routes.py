@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSock
 
 from app.agent.graph import process_message, request_manual_brief, run_agent_step
 from app.agent.routing import can_request_manual_brief
-from app.agent.nodes import generate_slm_consent_intro, greeting_node
+from app.agent.nodes import greeting_node, is_modal_consent_phrase, record_modal_consent
 from app.agent.task_router import get_suggestions
 from app.auth.dependencies import get_current_user, get_ws_user
 from app.config import settings
@@ -143,6 +143,7 @@ async def _send_assistant_reply(websocket: WebSocket, state: dict, *, include_hi
             state.get("missing_fields", []),
         ),
         "consent_given": state.get("consent_given", False),
+        "consent_required": not state.get("consent_given", False),
         "client_name": state.get("client_name"),
         "assets_count": len(state.get("assets", [])),
         "brief_version": state.get("brief_version", 1),
@@ -173,22 +174,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
         if not state.get("messages"):
             state = greeting_node(state)
             await mongo_session_store.update(session_id, state)
-            logger.info("Sent instant greeting to session %s", session_id)
+            logger.info("Initialized session %s awaiting modal consent", session_id)
             await _send_assistant_reply(websocket, state)
-            if state.get("consent_pending_slm"):
-                def _slm_consent_sync() -> dict:
-                    s = mongo_session_store.get_sync(session_id)
-                    s = generate_slm_consent_intro(s)
-                    mongo_session_store.update_sync(session_id, s)
-                    return s
-
-                loop = asyncio.get_running_loop()
-                state = await asyncio.wait_for(
-                    loop.run_in_executor(_agent_executor, _slm_consent_sync),
-                    timeout=90.0,
-                )
-                await mongo_session_store.update(session_id, state)
-                await _send_assistant_reply(websocket, state)
         else:
             logger.info("Syncing state to reconnected session %s", session_id)
             await _send_assistant_reply(websocket, state, include_history=True)
@@ -210,6 +197,25 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 payload = json.loads(data)
             except json.JSONDecodeError:
                 payload = {"message": data}
+
+            if payload.get("action") == "consent":
+                agreement = str(payload.get("agreement", ""))
+                state = await mongo_session_store.get(session_id, str(user.id))
+                if state.get("consent_given"):
+                    await _send_assistant_reply(websocket, state, include_history=True)
+                    continue
+                if not is_modal_consent_phrase(agreement):
+                    await websocket.send_json({
+                        "type": "consent_error",
+                        "message": 'Please type exactly "I agree" to continue.',
+                        "consent_required": True,
+                        "consent_given": False,
+                    })
+                    continue
+                state = record_modal_consent(state)
+                await mongo_session_store.update(session_id, state)
+                await _send_assistant_reply(websocket, state, include_history=True)
+                continue
 
             if payload.get("action") == "generate_brief":
                 logger.info("Manual brief requested for session %s", session_id)
@@ -237,6 +243,16 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
             user_message = payload.get("message", data)
             logger.info("Received message for session %s: %s", session_id, str(user_message)[:50])
+
+            pre_state = await mongo_session_store.get(session_id, str(user.id))
+            if not pre_state.get("consent_given"):
+                await websocket.send_json({
+                    "type": "consent_required",
+                    "message": "Please complete the privacy consent dialog to continue.",
+                    "consent_required": True,
+                    "consent_given": False,
+                })
+                continue
 
             try:
                 state = await _run_agent_step(session_id, user_message)

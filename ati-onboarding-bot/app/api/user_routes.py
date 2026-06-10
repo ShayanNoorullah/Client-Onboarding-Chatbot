@@ -67,6 +67,7 @@ async def get_session(session_id: str, user: User = Depends(get_current_user)):
         "missing_fields": state.get("missing_fields", []),
         "brief_download_url": brief_url,
         "consent_given": state.get("consent_given", False),
+        "consent_required": not state.get("consent_given", False),
         "brief_version": state.get("brief_version", 1),
         "show_generate_brief": can_request_manual_brief(state),
     }

@@ -225,6 +225,37 @@ def _ensure_project_workspace(state: OnboardingState) -> None:
     state["workspace_slug"] = slug
 
 
+MODAL_CONSENT_PHRASE = "i agree"
+
+
+def is_modal_consent_phrase(text: str) -> bool:
+    return text.strip().lower() == MODAL_CONSENT_PHRASE
+
+
+def record_modal_consent(state: OnboardingState) -> OnboardingState:
+    """Record consent from the privacy dialog (exact phrase: I agree)."""
+    state["consent_given"] = True
+    state["consent_ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    state["consent_pending_slm"] = False
+    state["consent_prompt_sent"] = True
+
+    if state.get("client_name"):
+        _ensure_project_workspace(state)
+        display = state["client_name"].replace("_", " ")
+        reply = (
+            f"Thank you, {display}! Your profile is linked to this project.\n\n"
+            "What kind of project can we help you with today?"
+        )
+        state["stage"] = "requirements"
+    else:
+        state["stage"] = "identity"
+        reply = "Thank you! Please confirm your full name for this project."
+
+    state["pending_reply"] = reply
+    state["messages"] = [{"role": "assistant", "content": reply}]
+    return state
+
+
 def _after_consent(state: OnboardingState, reply: str) -> None:
     state["consent_given"] = True
     state["consent_ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -249,12 +280,11 @@ CONSENT_PLACEHOLDER = (
 
 
 def greeting_node(state: OnboardingState) -> OnboardingState:
-    state["stage"] = "greeting"
-    state["pending_reply"] = CONSENT_PLACEHOLDER
-    _append_message(state, "assistant", CONSENT_PLACEHOLDER)
-    state["consent_prompt_sent"] = True
-    state["consent_pending_slm"] = True
+    """Initialize session — consent is collected via the UI dialog, not chat."""
     state["stage"] = "consent"
+    state["consent_prompt_sent"] = True
+    state["consent_pending_slm"] = False
+    state["pending_reply"] = ""
     return state
 
 
@@ -272,21 +302,21 @@ def generate_slm_consent_intro(state: OnboardingState) -> OnboardingState:
 
 def consent_node(state: OnboardingState) -> OnboardingState:
     state["stage"] = "consent"
+    if state.get("consent_given"):
+        return state
+
     last_user = _last_user_text(state)
+    if not last_user:
+        return state
 
-    if last_user:
-        detected, reply = _classify_consent(state, last_user)
-        if detected:
-            _after_consent(state, reply or "Thank you! Let's get started on your project.")
-        else:
-            state["pending_reply"] = reply
-            _append_message(state, "assistant", reply)
-    elif not state.get("consent_prompt_sent"):
-        _, reply = _classify_consent(state, "")
-        state["pending_reply"] = reply
-        _append_message(state, "assistant", reply)
-        state["consent_prompt_sent"] = True
+    if is_modal_consent_phrase(last_user):
+        return record_modal_consent(state)
 
+    reply = (
+        'Please complete the privacy consent dialog and type "I agree" to continue.'
+    )
+    state["pending_reply"] = reply
+    _append_message(state, "assistant", reply)
     return state
 
 
