@@ -98,6 +98,10 @@
   margin-bottom: 24px;
 }
 
+.admin-stats-row2 {
+  margin-top: -8px;
+}
+
 .admin-stat-card {
   border: 1px solid var(--border, #E5E7EB);
   border-radius: 8px;

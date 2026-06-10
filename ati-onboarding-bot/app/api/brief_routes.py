@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from app.auth.dependencies import get_current_user, require_admin
 from app.models.brief import Brief
 from app.models.user import User
+from app.services.brief_export import markdown_to_pdf_bytes, markdown_to_plain_text
 
 router = APIRouter(prefix="/api/briefs", tags=["briefs"])
 
@@ -32,12 +33,36 @@ async def get_brief(brief_id: str, user: User = Depends(get_current_user)):
 
 
 @router.get("/{brief_id}/download")
-async def download_brief(brief_id: str, user: User = Depends(get_current_user)):
+async def download_brief(
+    brief_id: str,
+    user: User = Depends(get_current_user),
+    format: str = Query(default="md", alias="format"),
+):
     brief = await _get_brief_for_user(brief_id, user)
-    filename = f"{brief.ref_id}.md"
+    fmt = format.lower().strip()
+    if fmt not in ("md", "txt", "pdf"):
+        raise HTTPException(status_code=400, detail="Format must be md, txt, or pdf")
+
+    if fmt == "md":
+        filename = f"{brief.ref_id}.md"
+        return Response(
+            content=brief.markdown,
+            media_type="text/markdown",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    if fmt == "txt":
+        filename = f"{brief.ref_id}.txt"
+        content = markdown_to_plain_text(brief.markdown)
+        return Response(
+            content=content,
+            media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    filename = f"{brief.ref_id}.pdf"
+    pdf_bytes = markdown_to_pdf_bytes(brief.markdown)
     return Response(
-        content=brief.markdown,
-        media_type="text/markdown",
+        content=pdf_bytes,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.schemas import ProfileUpdateRequest, SessionUpdateRequest
+from app.api.schemas import ProfileUpdateRequest, SessionUpdateRequest, UserPreferencesUpdate
+from app.services.user_preferences import apply_preference_updates, merge_preferences
 from app.agent.routing import can_request_manual_brief
 from app.auth.dependencies import get_current_user
 from app.auth.passwords import hash_password
@@ -14,6 +15,21 @@ router = APIRouter(prefix="/api/user", tags=["user"])
 @router.get("/profile")
 async def get_profile(user: User = Depends(get_current_user)):
     return {"user": user.to_public()}
+
+
+@router.get("/preferences")
+async def get_preferences(user: User = Depends(get_current_user)):
+    return {"preferences": merge_preferences(user.preferences)}
+
+
+@router.put("/preferences")
+async def update_preferences(body: UserPreferencesUpdate, user: User = Depends(get_current_user)):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No preferences to update")
+    user.preferences = apply_preference_updates(user.preferences, updates)
+    await user.save()
+    return {"preferences": user.preferences}
 
 
 @router.put("/profile")

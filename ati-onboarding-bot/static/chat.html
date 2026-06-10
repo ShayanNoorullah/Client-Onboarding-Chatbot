@@ -4,9 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat — Client Onboarding Agent</title>
-  <script>(function(){try{var t=localStorage.getItem("ati_theme")||"system";if(["system","light","dark"].indexOf(t)<0)t="system";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","system");}})();</script>
+  <script src="/static/js/theme-bootstrap.js?v=3.6.0"></script>
   <link href="/static/css/app.css" rel="stylesheet">
   <link href="/static/css/theme.css" rel="stylesheet">
+  <link href="/static/css/theme-presets.css" rel="stylesheet">
   <link href="/static/css/settings.css" rel="stylesheet">
   <link href="/static/css/site.css" rel="stylesheet">
   <link href="/static/css/transitions.css" rel="stylesheet">
@@ -72,7 +73,10 @@
 
       <div id="typing" class="typing-row d-none">
         <div class="msg-row assistant">
-          <div class="msg-bubble typing-dots"><span></span><span></span><span></span></div>
+          <div class="msg-bubble typing-indicator">
+            <span class="typing-label">Agent is thinking</span>
+            <span class="typing-pulse" aria-hidden="true"></span>
+          </div>
         </div>
       </div>
 
@@ -80,7 +84,14 @@
 
       <div id="composerActions" class="chat-composer-actions d-none">
         <button type="button" id="generateBriefBtn" class="btn-composer-action btn-composer-primary">Generate brief</button>
-        <a id="downloadBrief" href="#" class="btn-composer-action btn-composer-secondary d-none" download>Download brief</a>
+        <div id="downloadBriefWrap" class="brief-download-wrap d-none">
+          <button type="button" id="downloadBriefBtn" class="btn-composer-action btn-composer-secondary">Download brief</button>
+          <div id="downloadBriefMenu" class="brief-download-menu d-none">
+            <button type="button" data-brief-format="md">Markdown (.md)</button>
+            <button type="button" data-brief-format="txt">Text (.txt)</button>
+            <button type="button" data-brief-format="pdf">PDF (.pdf)</button>
+          </div>
+        </div>
       </div>
 
       <div class="chat-input-area">
@@ -97,10 +108,10 @@
       </div>
     </main>
   </div>
-  <script src="/static/js/theme.js?v=3.5.0"></script>
-  <script src="/static/js/transitions.js?v=3.5.0"></script>
-  <script src="/static/js/settings.js?v=3.5.0"></script>
-  <script src="/static/js/api.js?v=3.2.1"></script>
-  <script src="/static/js/chat.js?v=3.5.0"></script>
+  <script src="/static/js/theme.js?v=3.6.0"></script>
+  <script src="/static/js/transitions.js?v=3.6.0"></script>
+  <script src="/static/js/settings.js?v=3.6.0"></script>
+  <script src="/static/js/api.js?v=3.6.0"></script>
+  <script src="/static/js/chat.js?v=3.6.0"></script>
 </body>
 </html>

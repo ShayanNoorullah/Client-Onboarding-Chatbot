@@ -18,6 +18,27 @@ async function loadDashboard() {
   document.getElementById("statActive").textContent = data.active_users_7d;
   document.getElementById("statSessions").textContent = data.total_sessions;
   document.getElementById("statBriefs").textContent = data.completed_briefs;
+  document.getElementById("statCompletion").textContent = `${data.completion_rate ?? 0}%`;
+  document.getElementById("statConsent").textContent = `${data.consent_rate ?? 0}%`;
+  document.getElementById("statNewUsers").textContent = data.new_users_7d ?? 0;
+  document.getElementById("statActiveSessions").textContent = data.active_sessions_24h ?? 0;
+
+  const roleBody = document.getElementById("roleTable");
+  if (roleBody) {
+    roleBody.innerHTML = "";
+    const roles = data.users_by_role || {};
+    Object.entries(roles).forEach(([role, count]) => {
+      roleBody.innerHTML += `<tr><td>${role}</td><td>${count}</td></tr>`;
+    });
+  }
+
+  const activityBody = document.getElementById("activityTable");
+  if (activityBody) {
+    activityBody.innerHTML = "";
+    (data.activity_by_day || []).forEach((row) => {
+      activityBody.innerHTML += `<tr><td>${row.date}</td><td>${row.sessions}</td><td>${row.briefs}</td></tr>`;
+    });
+  }
 
   const stageBody = document.getElementById("stageTable");
   if (stageBody) {
@@ -50,21 +71,63 @@ async function loadDashboard() {
   }
 }
 
+let adminUserSearch = "";
+let adminUserSearchTimer = null;
+let currentAdminUser = null;
+
+function adminUsersUrl() {
+  const q = adminUserSearch.trim();
+  return q ? `/api/admin/users?q=${encodeURIComponent(q)}` : "/api/admin/users";
+}
+
 async function loadUsers() {
-  const data = await API.get("/api/admin/users");
+  const data = await API.get(adminUsersUrl());
   const body = document.getElementById("usersTable");
   body.innerHTML = "";
   (data.users || []).forEach((u) => {
-    body.innerHTML += `<tr>
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
       <td>${u.full_name}</td>
       <td>${u.email}</td>
       <td><span class="badge-admin role-${u.role}">${u.role}</span></td>
       <td>${u.is_active ? "Active" : "Inactive"}</td>
-      <td>
-        <button class="btn-admin-sm danger" onclick="deactivateUser('${u.id}')">Deactivate</button>
-      </td>
-    </tr>`;
+      <td class="admin-actions-cell"></td>`;
+    const actions = tr.querySelector(".admin-actions-cell");
+    const isSelf = currentAdminUser && u.id === currentAdminUser.id;
+
+    if (!isSelf && u.is_active) {
+      if (u.role === "user") {
+        const promoteBtn = document.createElement("button");
+        promoteBtn.className = "btn-admin-sm";
+        promoteBtn.textContent = "Make admin";
+        promoteBtn.onclick = () => changeUserRole(u.id, "admin", u.full_name);
+        actions.appendChild(promoteBtn);
+      } else {
+        const demoteBtn = document.createElement("button");
+        demoteBtn.className = "btn-admin-sm";
+        demoteBtn.textContent = "Remove admin";
+        demoteBtn.onclick = () => changeUserRole(u.id, "user", u.full_name);
+        actions.appendChild(demoteBtn);
+      }
+    }
+
+    if (!isSelf && u.is_active) {
+      const deactivateBtn = document.createElement("button");
+      deactivateBtn.className = "btn-admin-sm danger";
+      deactivateBtn.textContent = "Deactivate";
+      deactivateBtn.onclick = () => deactivateUser(u.id);
+      actions.appendChild(deactivateBtn);
+    }
+
+    body.appendChild(tr);
   });
+}
+
+async function changeUserRole(id, role, name) {
+  const action = role === "admin" ? "grant admin access to" : "remove admin role from";
+  if (!confirm(`Are you sure you want to ${action} ${name}?`)) return;
+  await API.put(`/api/admin/users/${id}`, { role });
+  loadUsers();
 }
 
 async function deactivateUser(id) {
@@ -78,12 +141,15 @@ async function loadBriefs() {
   const body = document.getElementById("briefsTable");
   body.innerHTML = "";
   (data.briefs || []).forEach((b) => {
+    const base = b.download_url.split("?")[0];
     body.innerHTML += `<tr>
       <td>${b.ref_id}</td>
       <td>${b.client_name}</td>
       <td>${new Date(b.created_at).toLocaleString()}</td>
-      <td>
-        <a href="${b.download_url}" class="btn-admin-sm">Download</a>
+      <td class="admin-actions-cell">
+        <a href="${base}?format=md" class="btn-admin-sm">MD</a>
+        <a href="${base}?format=txt" class="btn-admin-sm">TXT</a>
+        <a href="${base}?format=pdf" class="btn-admin-sm">PDF</a>
         <button class="btn-admin-sm danger" onclick="deleteBrief('${b.id}')">Delete</button>
       </td>
     </tr>`;
@@ -192,6 +258,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const user = await requireAdmin();
   if (!user) return;
+  currentAdminUser = user;
 
   initAdminLayout(page.id, page.title);
   mountPageTemplate();
@@ -202,6 +269,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       adminSessionSearch = e.target.value;
       clearTimeout(adminSessionSearchTimer);
       adminSessionSearchTimer = setTimeout(() => loadSessions().catch(console.error), 200);
+    });
+  }
+
+  const userSearchEl = document.getElementById("adminUserSearch");
+  if (userSearchEl) {
+    userSearchEl.addEventListener("input", (e) => {
+      adminUserSearch = e.target.value;
+      clearTimeout(adminUserSearchTimer);
+      adminUserSearchTimer = setTimeout(() => loadUsers().catch(console.error), 200);
     });
   }
 

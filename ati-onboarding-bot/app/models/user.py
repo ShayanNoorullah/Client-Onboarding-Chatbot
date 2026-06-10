@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from beanie import Document, Indexed
 from pydantic import EmailStr, Field
@@ -12,6 +12,7 @@ class User(Document):
     role: Literal["user", "admin"] = "user"
     google_id: str | None = None
     is_active: bool = True
+    preferences: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login: datetime | None = None
 

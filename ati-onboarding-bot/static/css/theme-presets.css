@@ -1,0 +1,169 @@
+/* Color theme presets — work with data-theme (light/dark/system) */
+
+html[data-theme-preset="ocean"] {
+  --primary: #0369A1;
+  --on-primary: #FFFFFF;
+  --muted: #E0F2FE;
+  --border: #BAE6FD;
+  --tertiary: #7DD3FC;
+}
+
+html[data-theme-preset="forest"] {
+  --primary: #166534;
+  --on-primary: #FFFFFF;
+  --muted: #DCFCE7;
+  --border: #BBF7D0;
+  --tertiary: #86EFAC;
+}
+
+html[data-theme-preset="sunset"] {
+  --primary: #C2410C;
+  --on-primary: #FFFFFF;
+  --muted: #FFEDD5;
+  --border: #FED7AA;
+  --tertiary: #FDBA74;
+}
+
+html[data-theme-preset="violet"] {
+  --primary: #6D28D9;
+  --on-primary: #FFFFFF;
+  --muted: #EDE9FE;
+  --border: #DDD6FE;
+  --tertiary: #C4B5FD;
+}
+
+html[data-theme-preset="slate"] {
+  --primary: #334155;
+  --on-primary: #FFFFFF;
+  --muted: #F1F5F9;
+  --border: #CBD5E1;
+  --tertiary: #94A3B8;
+}
+
+html[data-theme-preset="high-contrast"] {
+  --primary: #000000;
+  --on-primary: #FFFFFF;
+  --on-surface: #000000;
+  --surface: #FFFFFF;
+  --muted: #E5E5E5;
+  --border: #000000;
+  --secondary: #404040;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"][data-theme-preset="ocean"] {
+    --primary: #38BDF8;
+    --on-primary: #0C4A6E;
+    --muted: #0C4A6E;
+    --border: #075985;
+    --surface: #0F172A;
+    --on-surface: #E0F2FE;
+  }
+  html[data-theme="system"][data-theme-preset="forest"] {
+    --primary: #4ADE80;
+    --on-primary: #14532D;
+    --muted: #14532D;
+    --border: #166534;
+    --surface: #0F1A14;
+    --on-surface: #DCFCE7;
+  }
+  html[data-theme="system"][data-theme-preset="sunset"] {
+    --primary: #FB923C;
+    --on-primary: #431407;
+    --muted: #431407;
+    --border: #9A3412;
+    --surface: #1A120E;
+    --on-surface: #FFEDD5;
+  }
+  html[data-theme="system"][data-theme-preset="violet"] {
+    --primary: #A78BFA;
+    --on-primary: #2E1065;
+    --muted: #2E1065;
+    --border: #5B21B6;
+    --surface: #120E1A;
+    --on-surface: #EDE9FE;
+  }
+  html[data-theme="system"][data-theme-preset="slate"] {
+    --primary: #CBD5E1;
+    --on-primary: #0F172A;
+    --muted: #1E293B;
+    --border: #334155;
+    --surface: #0F172A;
+    --on-surface: #F1F5F9;
+  }
+  html[data-theme="system"][data-theme-preset="high-contrast"] {
+    --primary: #FFFFFF;
+    --on-primary: #000000;
+    --on-surface: #FFFFFF;
+    --surface: #000000;
+    --muted: #262626;
+    --border: #FFFFFF;
+    --secondary: #D4D4D4;
+  }
+}
+
+html[data-theme="dark"][data-theme-preset="ocean"] {
+  --primary: #38BDF8;
+  --on-primary: #0C4A6E;
+  --muted: #0C4A6E;
+  --border: #075985;
+  --surface: #0F172A;
+  --on-surface: #E0F2FE;
+}
+
+html[data-theme="dark"][data-theme-preset="forest"] {
+  --primary: #4ADE80;
+  --on-primary: #14532D;
+  --muted: #14532D;
+  --border: #166534;
+  --surface: #0F1A14;
+  --on-surface: #DCFCE7;
+}
+
+html[data-theme="dark"][data-theme-preset="sunset"] {
+  --primary: #FB923C;
+  --on-primary: #431407;
+  --muted: #431407;
+  --border: #9A3412;
+  --surface: #1A120E;
+  --on-surface: #FFEDD5;
+}
+
+html[data-theme="dark"][data-theme-preset="violet"] {
+  --primary: #A78BFA;
+  --on-primary: #2E1065;
+  --muted: #2E1065;
+  --border: #5B21B6;
+  --surface: #120E1A;
+  --on-surface: #EDE9FE;
+}
+
+html[data-theme="dark"][data-theme-preset="slate"] {
+  --primary: #CBD5E1;
+  --on-primary: #0F172A;
+  --muted: #1E293B;
+  --border: #334155;
+  --surface: #0F172A;
+  --on-surface: #F1F5F9;
+}
+
+html[data-theme="dark"][data-theme-preset="high-contrast"] {
+  --primary: #FFFFFF;
+  --on-primary: #000000;
+  --on-surface: #FFFFFF;
+  --surface: #000000;
+  --muted: #262626;
+  --border: #FFFFFF;
+  --secondary: #D4D4D4;
+}
+
+/* Custom theme — JS sets --custom-* vars; map to tokens when preset is custom */
+html[data-theme-preset="custom"] {
+  --primary: var(--custom-primary, #0D0D0D);
+  --on-primary: var(--custom-on-primary, #FFFFFF);
+  --surface: var(--custom-surface, #FFFFFF);
+  --on-surface: var(--custom-text, #0D0D0D);
+  --muted: var(--custom-muted, #F3F4F6);
+  --border: var(--custom-border, #E5E7EB);
+  --tertiary: var(--custom-accent, #E5E7EB);
+}

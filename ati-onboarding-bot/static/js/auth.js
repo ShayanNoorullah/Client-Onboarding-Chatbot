@@ -49,6 +49,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       try {
         const data = await API.post("/api/auth/login", { email, password });
         if (typeof cacheAuthUser === "function") cacheAuthUser(data.user);
+        try {
+          sessionStorage.setItem("ati_fresh_login", "1");
+        } catch {
+          /* ignore */
+        }
         window.location.href = data.user.role === "admin" ? "/admin/dashboard.html" : "/chat.html";
       } catch (err) {
         showError(err.message);
@@ -65,6 +70,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       try {
         const data = await API.post("/api/auth/register", { email, password, full_name });
         if (typeof cacheAuthUser === "function") cacheAuthUser(data.user);
+        try {
+          sessionStorage.setItem("ati_fresh_login", "1");
+        } catch {
+          /* ignore */
+        }
         window.location.href = "/chat.html";
       } catch (err) {
         showError(err.message);

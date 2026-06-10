@@ -234,3 +234,77 @@ body.settings-open {
 .admin-sidebar-footer [data-open-settings]:hover {
   background: var(--muted);
 }
+
+.theme-preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.theme-preset-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--swatch-color);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.theme-preset-swatch.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
+}
+
+.theme-preset-swatch[data-preset="custom"] {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.custom-theme-panel {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--muted);
+  border-radius: 8px;
+}
+
+.settings-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.settings-color-row label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--on-surface);
+}
+
+.settings-color-row input[type="color"] {
+  width: 40px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  cursor: pointer;
+  background: var(--surface);
+}
+
+.settings-color-clear {
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--secondary);
+  cursor: pointer;
+}
+
+.settings-reset-custom {
+  margin-top: 8px;
+  width: 100%;
+  font-size: 12px;
+  padding: 8px;
+}

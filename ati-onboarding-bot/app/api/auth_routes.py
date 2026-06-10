@@ -90,7 +90,8 @@ async def google_callback(request: Request):
         user.last_login = datetime.now(timezone.utc)
         await user.save()
     jwt_token = create_access_token(str(user.id), user.role)
-    redirect = RedirectResponse(url=f"{settings.FRONTEND_URL}/chat.html")
+    dest = "/admin/dashboard.html" if user.role == "admin" else "/chat.html?fresh=1"
+    redirect = RedirectResponse(url=f"{settings.FRONTEND_URL}{dest}")
     redirect.set_cookie(
         key=settings.COOKIE_NAME,
         value=jwt_token,

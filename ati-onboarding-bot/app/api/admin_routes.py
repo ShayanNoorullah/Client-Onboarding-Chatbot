@@ -19,10 +19,52 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 async def dashboard(_: User = Depends(require_admin)):
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
+    day_ago = now - timedelta(hours=24)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
     total_users = await User.count()
     active_users = await User.find(User.last_login >= week_ago).count()
+    new_users_7d = await User.find(User.created_at >= week_ago).count()
     total_sessions = await OnboardingSessionDoc.count()
     completed_briefs = await Brief.count()
+    new_sessions_7d = await OnboardingSessionDoc.find(
+        OnboardingSessionDoc.created_at >= week_ago
+    ).count()
+    sessions_today = await OnboardingSessionDoc.find(
+        OnboardingSessionDoc.created_at >= today_start
+    ).count()
+    briefs_7d = await Brief.find(Brief.created_at >= week_ago).count()
+    done_sessions = await OnboardingSessionDoc.find(OnboardingSessionDoc.done == True).count()
+    consent_sessions = await OnboardingSessionDoc.find(
+        OnboardingSessionDoc.consent_given == True
+    ).count()
+    active_sessions_24h = await OnboardingSessionDoc.find(
+        OnboardingSessionDoc.updated_at >= day_ago
+    ).count()
+    admin_count = await User.find(User.role == "admin", User.is_active == True).count()
+    user_count = await User.find(User.role == "user", User.is_active == True).count()
+
+    completion_rate = round((done_sessions / total_sessions * 100) if total_sessions else 0, 1)
+    consent_rate = round((consent_sessions / total_sessions * 100) if total_sessions else 0, 1)
+
+    activity_by_day = []
+    for i in range(6, -1, -1):
+        day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        sess_count = await OnboardingSessionDoc.find(
+            OnboardingSessionDoc.created_at >= day_start,
+            OnboardingSessionDoc.created_at < day_end,
+        ).count()
+        brief_count = await Brief.find(
+            Brief.created_at >= day_start,
+            Brief.created_at < day_end,
+        ).count()
+        activity_by_day.append({
+            "date": day_start.strftime("%Y-%m-%d"),
+            "sessions": sess_count,
+            "briefs": brief_count,
+        })
+
     sessions_by_stage: dict[str, int] = {}
     for stage in ["greeting", "consent", "identity", "requirements", "clarify", "summarise"]:
         sessions_by_stage[stage] = await OnboardingSessionDoc.find(
@@ -39,8 +81,17 @@ async def dashboard(_: User = Depends(require_admin)):
     return {
         "total_users": total_users,
         "active_users_7d": active_users,
+        "new_users_7d": new_users_7d,
         "total_sessions": total_sessions,
+        "new_sessions_7d": new_sessions_7d,
+        "sessions_today": sessions_today,
         "completed_briefs": completed_briefs,
+        "briefs_7d": briefs_7d,
+        "completion_rate": completion_rate,
+        "consent_rate": consent_rate,
+        "active_sessions_24h": active_sessions_24h,
+        "users_by_role": {"user": user_count, "admin": admin_count},
+        "activity_by_day": activity_by_day,
         "sessions_by_stage": sessions_by_stage,
         "project_types": project_types,
         "recent_sessions": [s.to_summary() for s in recent],
@@ -51,12 +102,20 @@ async def dashboard(_: User = Depends(require_admin)):
 @router.get("/users")
 async def list_users(
     _: User = Depends(require_admin),
+    q: str | None = Query(default=None, max_length=100),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
-    users = await User.find().skip(skip).limit(limit).to_list()
-    total = await User.count()
-    return {"users": [u.to_public() for u in users], "total": total}
+    users = await User.find().to_list()
+    if q:
+        needle = q.strip().lower()
+        users = [
+            u for u in users
+            if needle in u.email.lower() or needle in u.full_name.lower()
+        ]
+    total = len(users)
+    page = users[skip : skip + limit]
+    return {"users": [u.to_public() for u in page], "total": total}
 
 
 @router.post("/users")
@@ -82,13 +141,23 @@ async def get_user(user_id: str, _: User = Depends(require_admin)):
 
 
 @router.put("/users/{user_id}")
-async def update_user(user_id: str, body: AdminUserUpdate, _: User = Depends(require_admin)):
+async def update_user(
+    user_id: str,
+    body: AdminUserUpdate,
+    current_admin: User = Depends(require_admin),
+):
     user = await User.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if body.full_name is not None:
         user.full_name = body.full_name
     if body.role is not None and body.role in ("user", "admin"):
+        if str(user.id) == str(current_admin.id) and body.role != user.role:
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+        if user.role == "admin" and body.role == "user":
+            admin_count = await User.find(User.role == "admin", User.is_active == True).count()
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="Cannot remove the last admin")
         user.role = body.role
     if body.is_active is not None:
         user.is_active = body.is_active

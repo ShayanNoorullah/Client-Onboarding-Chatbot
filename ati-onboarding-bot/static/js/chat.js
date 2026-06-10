@@ -111,25 +111,36 @@ function renderChips(suggestions) {
 function updateComposerActionsVisibility() {
   const wrapper = document.getElementById("composerActions");
   const genBtn = document.getElementById("generateBriefBtn");
-  const dlBtn = document.getElementById("downloadBrief");
+  const dlWrap = document.getElementById("downloadBriefWrap");
   if (!wrapper) return;
   const showGen = genBtn && !genBtn.classList.contains("d-none");
-  const showDl = dlBtn && !dlBtn.classList.contains("d-none");
+  const showDl = dlWrap && !dlWrap.classList.contains("d-none");
   wrapper.classList.toggle("d-none", !showGen && !showDl);
 }
 
+let briefDownloadBaseUrl = null;
+
 function updateDownloadBtn(data) {
-  const btn = document.getElementById("downloadBrief");
-  if (!btn) return;
+  const wrap = document.getElementById("downloadBriefWrap");
+  const btn = document.getElementById("downloadBriefBtn");
+  if (!wrap || !btn) return;
   if (data.done && data.brief_download_url) {
-    btn.classList.remove("d-none");
-    btn.href = data.brief_download_url;
+    briefDownloadBaseUrl = data.brief_download_url.split("?")[0];
+    wrap.classList.remove("d-none");
     const version = data.brief_version > 1 ? ` (v${data.brief_version})` : "";
     btn.textContent = `Download brief${version}`;
   } else {
-    btn.classList.add("d-none");
+    briefDownloadBaseUrl = null;
+    wrap.classList.add("d-none");
+    document.getElementById("downloadBriefMenu")?.classList.add("d-none");
   }
   updateComposerActionsVisibility();
+}
+
+function downloadBriefAs(format) {
+  if (!briefDownloadBaseUrl) return;
+  window.location.href = `${briefDownloadBaseUrl}?format=${format}`;
+  document.getElementById("downloadBriefMenu")?.classList.add("d-none");
 }
 
 function updateGenerateBriefBtn(data) {
@@ -545,7 +556,36 @@ async function uploadFile(file) {
   sendMessage(`I uploaded ${data.filename}. ${data.description_preview || ""}`);
 }
 
+function isFreshLogin() {
+  try {
+    if (sessionStorage.getItem("ati_fresh_login") === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return new URLSearchParams(window.location.search).get("fresh") === "1";
+}
+
+function clearFreshLoginFlag() {
+  try {
+    sessionStorage.removeItem("ati_fresh_login");
+  } catch {
+    /* ignore */
+  }
+  if (window.location.search.includes("fresh=1")) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("fresh");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }
+}
+
 async function initSessionForUser() {
+  if (isFreshLogin()) {
+    clearStoredSessionId();
+    clearFreshLoginFlag();
+    await newSession();
+    return;
+  }
+
   const sessionsRes = await API.get("/api/user/sessions");
   const userSessions = sessionsRes.sessions || [];
   const sessionIds = new Set(userSessions.map((s) => s.session_id));
@@ -597,6 +637,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     sessionSearchTimer = setTimeout(() => loadSessions().catch(console.error), 200);
   });
   document.getElementById("generateBriefBtn")?.addEventListener("click", requestGenerateBrief);
+  document.getElementById("downloadBriefBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById("downloadBriefMenu");
+    menu?.classList.toggle("d-none");
+  });
+  document.querySelectorAll("[data-brief-format]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      downloadBriefAs(btn.dataset.briefFormat);
+    });
+  });
+  document.addEventListener("click", () => {
+    document.getElementById("downloadBriefMenu")?.classList.add("d-none");
+  });
   document.getElementById("logoutBtn")?.addEventListener("click", async () => {
     if (typeof logoutUser === "function") {
       await logoutUser();

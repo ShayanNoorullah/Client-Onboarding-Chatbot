@@ -34,3 +34,21 @@ class AdminUserUpdate(BaseModel):
 class SessionUpdateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=80)
     pinned: bool | None = None
+
+
+class UserPreferencesUpdate(BaseModel):
+    ati_theme: str | None = None
+    ati_theme_preset: str | None = None
+    ati_custom_theme: str | None = None
+    ati_chat_density: str | None = None
+    ati_chat_width: str | None = None
+    ati_chat_style: str | None = None
+    ati_chat_user_bubble: str | None = None
+    ati_chat_assistant_bubble: str | None = None
+    ati_chat_accent: str | None = None
+    ati_send_on_enter: str | None = None
+    ati_show_chips: str | None = None
+    ati_show_typing: str | None = None
+    ati_auto_scroll: str | None = None
+    ati_reduce_motion: str | None = None
+    ati_ui_animations: str | None = None
