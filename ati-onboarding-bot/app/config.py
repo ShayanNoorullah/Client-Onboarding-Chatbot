@@ -17,6 +17,24 @@ class Settings:
     OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "llava")
     OLLAMA_CHAT_TEMPERATURE: float = float(os.getenv("OLLAMA_CHAT_TEMPERATURE", "0.3"))
 
+    MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+    MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "ati_onboarding")
+
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv(
+        "GOOGLE_REDIRECT_URI", "http://127.0.0.1:8001/api/auth/google/callback"
+    )
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://127.0.0.1:8001")
+
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@awesometechinc.com")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "Admin123!")
+    ADMIN_FULL_NAME: str = os.getenv("ADMIN_FULL_NAME", "ATI Admin")
+
     STORAGE_ROOT: Path = Path(os.getenv("STORAGE_ROOT", "./client_data"))
     ATI_KB_ROOT: Path = Path(os.getenv("ATI_KB_ROOT", "./ati_kb"))
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
@@ -30,6 +48,7 @@ class Settings:
     MAX_UPLOAD_SIZE_MB: int = 50
     MAX_FILES_PER_SESSION: int = 20
     RAG_CONTEXT_MAX_CHARS: int = 1500
+    COOKIE_NAME: str = "access_token"
 
     SUPPORTED_EXTENSIONS: set[str] = {
         ".jpg", ".jpeg", ".png", ".gif", ".webp",

@@ -59,9 +59,25 @@ def run_agent_step(state: OnboardingState) -> OnboardingState:
     return state
 
 
+def _maybe_auto_summarise(state: OnboardingState) -> OnboardingState:
+    from app.agent.routing import is_ready_for_auto_brief
+
+    if not is_ready_for_auto_brief(state):
+        return state
+    transition = "I have enough information — preparing your project brief now..."
+    state["auto_summarising"] = True
+    state["pending_reply"] = transition
+    _append_transition(state, transition)
+    return summarise_node(state)
+
+
+def _append_transition(state: OnboardingState, text: str) -> None:
+    state["messages"].append({"role": "assistant", "content": text})
+
+
 def process_message(state: OnboardingState, user_message: str) -> OnboardingState:
     """Process a user message — one stage per message, no chaining."""
-    from app.agent.routing import is_consent_message, is_done_message
+    from app.agent.routing import is_consent_message, should_summarise
 
     state["messages"].append({"role": "user", "content": user_message})
     stage = state.get("stage", "greeting")
@@ -77,15 +93,18 @@ def process_message(state: OnboardingState, user_message: str) -> OnboardingStat
     if stage == "identity":
         return identity_node(state)
     if stage == "requirements":
-        if is_done_message(user_message):
+        if should_summarise(state, user_message):
             return summarise_node(state)
         if state.get("file_context"):
-            return clarify_node(state)
-        return requirements_node(state)
+            state = clarify_node(state)
+        else:
+            state = requirements_node(state)
+        return _maybe_auto_summarise(state)
     if stage == "clarify":
-        if is_done_message(user_message):
+        if should_summarise(state, user_message):
             return summarise_node(state)
-        return clarify_node(state)
+        state = clarify_node(state)
+        return _maybe_auto_summarise(state)
     if stage == "summarise":
         return summarise_node(state)
 

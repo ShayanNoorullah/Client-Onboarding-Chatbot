@@ -51,6 +51,38 @@ def test_query_rag_empty_dir(tmp_path):
     assert result == ""
 
 
+def test_query_rag_mobile_app_content(kb_files, mock_embeddings, tmp_path):
+    catalogue = kb_files / "service_catalogue.txt"
+    catalogue.write_text(
+        "=== MOBILE APP DEVELOPMENT ===\n"
+        "ATI builds native and cross-platform mobile applications for iOS and Android.\n"
+        "Features include push notifications, offline mode, and app store deployment.",
+        encoding="utf-8",
+    )
+    vectors_dir = tmp_path / "vectors"
+    vectors_dir.mkdir()
+
+    mobile_doc = MagicMock()
+    mobile_doc.page_content = "ATI builds native and cross-platform mobile applications for iOS and Android."
+
+    mortgage_doc = MagicMock()
+    mortgage_doc.page_content = "Mortgage loan application form integration for lending websites."
+
+    with patch("app.rag.retriever.Chroma") as mock_chroma:
+        mock_vs = MagicMock()
+        mock_retriever = MagicMock()
+        mock_retriever.invoke.return_value = [mobile_doc]
+        mock_vs.as_retriever.return_value = mock_retriever
+        mock_chroma.return_value = mock_vs
+
+        from app.agent.task_router import build_rag_query
+
+        query = build_rag_query("Mobile App", "mobile_app_development")
+        result = query_rag(query, vectors_dir, "ati_kb")
+        assert "mobile" in result.lower()
+        assert "iOS" in result or "Android" in result
+
+
 def test_query_rag_with_mock(kb_files, mock_embeddings, tmp_path):
     vectors_dir = tmp_path / "vectors"
     vectors_dir.mkdir()

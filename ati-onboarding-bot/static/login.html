@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — ATI Onboarding</title>
+  <link href="/static/css/app.css" rel="stylesheet">
+</head>
+<body class="auth-page d-flex align-items-center justify-content-center">
+  <div class="auth-card w-100 mx-3">
+    <h4 class="text-center">ATI Onboarding Assistant</h4>
+    <p class="text-center small mb-4" style="color: var(--secondary);">Awesome Technologies Inc.</p>
+    <div id="authError" class="alert alert-danger d-none" style="font-size:14px;color:var(--error);"></div>
+    <form id="loginForm">
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" id="email" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Password</label>
+        <input type="password" id="password" class="form-control" required>
+      </div>
+      <button type="submit" class="btn-primary-custom mb-2">Sign in</button>
+    </form>
+    <button id="googleLogin" class="btn-secondary-custom mb-3">Sign in with Google</button>
+    <p class="text-center small mb-0" style="color:var(--secondary);">No account? <a href="/register.html">Register</a></p>
+  </div>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+</body>
+</html>

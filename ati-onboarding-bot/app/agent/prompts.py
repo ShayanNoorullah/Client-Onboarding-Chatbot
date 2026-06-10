@@ -164,7 +164,13 @@ ATI context (from knowledge base):
 Already collected:
 {collected_requirements}
 
-Keep responses concise (2-4 sentences). Mention relevant ATI services when appropriate."""
+Rules:
+- Honor the client's stated project type. Ask follow-up questions specific to that type.
+- Only discuss mortgage or lending if the client chose a mortgage-related project or mentioned lending.
+- For mobile app projects, ask about platforms (iOS/Android), target users, MVP features, and timeline — not mortgage applications.
+- Ask ONE question at a time from: platform, audience, features, timeline, integrations, design.
+
+Keep responses concise (2-4 sentences). Use the ATI context above for service details."""
 
 SUMMARY_EXTRACTION_PROMPT = """Based on the conversation below, extract structured project requirements.
 
@@ -178,6 +184,41 @@ Conversation:
 {conversation}
 
 Respond with ONLY valid JSON, no markdown fences."""
+
+CONSENT_SLM_PROMPT = """You are the ATI Onboarding Assistant. Explain privacy and consent naturally.
+
+Privacy policy context:
+{rag_context}
+
+Support email: {support_email}
+Privacy URL: {privacy_url}
+
+The client message: "{user_message}"
+
+Respond with ONLY valid JSON:
+{{"consent_detected": true/false, "reply": "your conversational response"}}
+
+Rules:
+- If no user message yet, introduce yourself and explain what data ATI collects and why, link privacy policy, ask for consent naturally.
+- If user message expresses agreement/consent (any natural phrasing), set consent_detected true and thank them.
+- If user asks questions, answer using privacy context then ask for consent again.
+- Keep reply under 4 sentences. Do not invent legal terms."""
+
+COMPLETION_EVAL_PROMPT = """Evaluate if enough project requirements have been collected for an ATI client brief.
+
+Required areas: project_type, audience, features, timeline, budget, integrations, design_preferences
+
+Collected so far:
+{collected}
+
+Recent conversation:
+{conversation}
+
+Respond with ONLY valid JSON:
+{{"complete": true/false, "score": 0.0-1.0, "missing": ["field names still needed"], "reason": "brief explanation"}}
+
+Mark complete=true when project_type and at least 3 other areas have meaningful answers.
+When complete=true, the system will automatically generate the client brief — the user does not need to say "I'm done"."""
 
 
 def build_slm_prompt(

@@ -212,7 +212,7 @@ Stage 5 — Summary Generation & RAG Indexing
 | LLM / Chat Model | OpenAI GPT-4o (or Azure OpenAI) |
 | Orchestration | LangChain ≥ 0.3 + LangGraph |
 | Embeddings | text-embedding-3-large (OpenAI) |
-| Vector Store | ChromaDB (local persistent) |
+| Vector Store | ChromaDB (local persistent) | //Pine cone alternative
 | Image Understanding | GPT-4o Vision (inline base64) |
 | PDF Parsing | PyMuPDF |
 | DOCX Parsing | python-docx |

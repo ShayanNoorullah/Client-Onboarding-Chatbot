@@ -1,138 +1,58 @@
-# ATI Client Onboarding AI Chatbot
+# ATI Client Onboarding AI Chatbot v3
 
-An AI-powered onboarding assistant for Awesome Technologies Inc. (ATI) that gathers project requirements through natural conversation, accepts file uploads, and generates structured client briefs.
+AI-powered onboarding for Awesome Technologies Inc. — login-first, MongoDB-backed, Bootstrap UI, local Ollama SLMs + ChromaDB RAG.
 
-Built with **FastAPI**, **LangGraph**, **ChromaDB RAG**, **Ollama (local SLMs)**, and **React + Vite**.
+## v3 Features
 
-**No API keys. No quota limits. Runs 100% free locally.**
-
----
+- **Login / Register** (email + password) and **Google OAuth**
+- **MongoDB Atlas** for users, sessions, briefs
+- **Bootstrap HTML/JS** chat UI (ChatGPT-style sidebar layout)
+- **Admin dashboard** with KPIs and user/session/brief CRUD
+- **SLM-driven consent** and **intelligent completion detection**
+- **Downloadable briefs** (`.md`) for users and admins
+- Local Ollama (`qwen2.5:3b`, `nomic-embed-text`, `llava`) — no API keys
 
 ## Prerequisites
 
-| Requirement | Notes |
-|-------------|-------|
-| Python 3.11 or 3.12 | [python.org/downloads](https://www.python.org/downloads/) |
-| Node.js 18+ | For React frontend build |
-| Ollama | [ollama.com/download](https://ollama.com/download) |
-| 8+ GB RAM | For chat + vision models |
+- Python 3.11+
+- Ollama with models pulled
+- MongoDB Atlas cluster (connection string)
+- Google OAuth credentials (optional, for Google sign-in)
 
----
-
-## One-Time Setup
-
-### 1. Install Ollama and pull models
+## Setup
 
 ```powershell
-# Install Ollama from https://ollama.com/download, then:
-ollama pull qwen2.5:3b
-ollama pull nomic-embed-text
-ollama pull llava
-```
-
-### 2. Python environment
-
-```powershell
-cd "C:\Users\Asus\Desktop\Awesome Technologies\ati-onboarding-bot"
+cd ati-onboarding-bot
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-### 3. Configure `.env`
-
-```powershell
 copy .env.example .env
-```
-
-Generate encryption key:
-```powershell
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-### 4. Verify Ollama
-
-```powershell
-python scripts/check_ollama.py
-```
-
-### 5. Index knowledge base (re-run after KB changes)
-
-```powershell
-Remove-Item -Recurse -Force ati_kb\vectors -ErrorAction SilentlyContinue
+# Edit .env: MONGODB_URI, JWT_SECRET_KEY, ADMIN_EMAIL, ADMIN_PASSWORD
 python scripts/init_kb.py
-```
-
-### 6. Build React frontend
-
-```powershell
-cd frontend
-npm install
-npm run build
-cd ..
-```
-
----
-
-## Run
-
-```powershell
-.venv\Scripts\activate
 uvicorn main:app --host 127.0.0.1 --port 8001
 ```
 
-Open [http://127.0.0.1:8001](http://127.0.0.1:8001)
+Open [http://127.0.0.1:8001/login.html](http://127.0.0.1:8001/login.html)
 
-### Development (hot reload frontend)
+## Environment variables
 
-```powershell
-# Terminal 1 — backend
-uvicorn main:app --host 127.0.0.1 --port 8001
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MONGODB_URI` | Yes | MongoDB Atlas connection string |
+| `JWT_SECRET_KEY` | Yes | Secret for JWT cookies |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Yes | First admin seeded on startup |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | No | Google OAuth |
+| `OLLAMA_*` | Yes | Ollama models (see v2 docs) |
 
-# Terminal 2 — frontend
-cd frontend && npm run dev
-```
+## API overview
 
-Frontend dev server: [http://127.0.0.1:5173](http://127.0.0.1:5173) (proxies API to :8001)
-
----
-
-## Architecture
-
-| Stage | Method | Model |
-|-------|--------|-------|
-| Consent, Identity | Rule-based | None |
-| Requirements, Clarify | SLM + RAG | `qwen2.5:3b` + ChromaDB |
-| Summarise | SLM + RAG | `qwen2.5:3b` |
-| Embeddings | Local | `nomic-embed-text` |
-| Image vision | Local | `llava` |
-| PDF/DOCX/TXT | Parsers | PyMuPDF, python-docx |
-
----
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| WS | `/ws/chat/{session_id}` | WebSocket chat |
-| POST | `/upload/{session_id}` | File upload |
-| GET | `/client/{name}/summary` | Retrieve brief |
-| GET | `/client/{name}/assets` | List assets |
-| DELETE | `/client/{name}` | Purge client data |
-| GET | `/health` | Health + Ollama status |
-
----
-
-## UI Features
-
-- 5-step progress stepper (Consent → Name → Project → Files → Brief)
-- Quick-reply suggestion chips
-- Consent card with privacy policy link
-- Drag-and-drop file upload with previews
-- Typing indicator
-- Clickable links in messages
-
----
+| Area | Endpoints |
+|------|-----------|
+| Auth | `POST /api/auth/register`, `/login`, `GET /google/login`, `/me` |
+| User | `POST /api/user/sessions`, `GET /profile`, `/sessions`, `/briefs` |
+| Chat | `WS /ws/chat/{id}`, `POST /upload/{id}` |
+| Briefs | `GET /api/briefs/{id}/download` |
+| Admin | `GET /api/admin/dashboard`, CRUD `/users`, `/sessions`, `/briefs` |
 
 ## Tests
 
@@ -140,22 +60,8 @@ Frontend dev server: [http://127.0.0.1:5173](http://127.0.0.1:5173) (proxies API
 pytest tests/ -v
 ```
 
----
+## Notes
 
-## Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| Ollama not reachable | Run `ollama serve` or restart Ollama app |
-| Missing models | `ollama pull qwen2.5:3b` etc. |
-| Slow first response | Normal — model loads on first call (~10s). Run `check_ollama.py` to warm up |
-| Port 8000 busy | Use port 8001 (Apache may use 8000) |
-| RAG returns nothing | Re-run `python scripts/init_kb.py` after deleting `ati_kb/vectors` |
-
----
-
-## Support
-
-- Email: support@awesometechinc.com
-- Phone: 877-284-4968
-- Privacy: https://awesometechinc.com/privacy-policy/
+- React `frontend/` is **deprecated** — v3 uses `static/` Bootstrap UI
+- ChromaDB vectors and uploaded files remain on local disk (`client_data/`)
+- Re-index KB after editing `ati_kb/*.txt`

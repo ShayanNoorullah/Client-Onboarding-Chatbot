@@ -18,6 +18,13 @@ class OnboardingState(TypedDict):
     done: bool
     requirements_asked: int
     collected_requirements: dict[str, str]
+    requirements_complete: bool
+    readiness_score: float
+    missing_fields: list[str]
+    user_id: str | None
+    brief_id: str | None
+    consent_prompt_sent: bool
+    auto_summarising: bool
 
 
 def default_state() -> OnboardingState:
@@ -38,4 +45,11 @@ def default_state() -> OnboardingState:
         "done": False,
         "requirements_asked": 0,
         "collected_requirements": {},
+        "requirements_complete": False,
+        "readiness_score": 0.0,
+        "missing_fields": [],
+        "user_id": None,
+        "brief_id": None,
+        "consent_prompt_sent": False,
+        "auto_summarising": False,
     }

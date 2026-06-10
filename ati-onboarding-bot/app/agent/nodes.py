@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.agent.prompts import (
+    COMPLETION_EVAL_PROMPT,
     CONSENT_MESSAGE,
+    CONSENT_SLM_PROMPT,
     SUMMARY_EXTRACTION_PROMPT,
     build_slm_prompt,
 )
@@ -14,7 +16,9 @@ from app.agent.state import OnboardingState
 from app.agent.task_router import (
     FALLBACK_QUESTIONS,
     REQUIREMENT_FIELDS,
+    build_rag_query,
     get_next_fallback_question,
+    normalize_project_type,
 )
 from app.config import settings
 from app.llm.factory import get_chat_llm
@@ -41,8 +45,11 @@ def _get_rag_context(state: OnboardingState, query: str = "") -> str:
                 break
     if not query:
         query = "ATI services and privacy policy"
+
+    project_type = state.get("collected_requirements", {}).get("project_type")
+    rag_query = build_rag_query(query, project_type)
     try:
-        return query_combined_rag(query, state.get("client_name"))
+        return query_combined_rag(rag_query, state.get("client_name"))
     except Exception:
         logger.exception("RAG query failed")
         return ""
@@ -51,9 +58,17 @@ def _get_rag_context(state: OnboardingState, query: str = "") -> str:
 def _update_collected_requirements(state: OnboardingState, user_message: str) -> None:
     collected = state.setdefault("collected_requirements", {})
     asked = state.get("requirements_asked", 0)
+
+    detected_type = normalize_project_type(user_message)
+    if detected_type and not collected.get("project_type"):
+        collected["project_type"] = detected_type
+
     if asked < len(REQUIREMENT_FIELDS):
         field = REQUIREMENT_FIELDS[asked]
-        collected[field] = user_message.strip()[:500]
+        if field == "project_type" and collected.get("project_type"):
+            collected[field] = collected["project_type"]
+        else:
+            collected[field] = user_message.strip()[:500]
     state["requirements_asked"] = asked + 1
 
 
@@ -100,37 +115,151 @@ def _invoke_llm(state: OnboardingState, user_input: str | None = None) -> str:
         )
 
 
+def _parse_json_response(text: str) -> dict:
+    text = str(text).strip()
+    text = re.sub(r"^```json\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _classify_consent(state: OnboardingState, user_message: str = "") -> tuple[bool, str]:
+    rag = _get_rag_context(state, "ATI privacy policy data collection")
+    prompt = CONSENT_SLM_PROMPT.format(
+        rag_context=rag[:1200] or "ATI collects name, project details, files for brief preparation only.",
+        support_email=settings.ATI_SUPPORT_EMAIL,
+        privacy_url=settings.ATI_PRIVACY_URL,
+        user_message=user_message or "No message yet — give initial consent explanation.",
+    )
+    try:
+        llm = get_chat_llm(temperature=0.2)
+        response = llm.invoke([HumanMessage(content=prompt)])
+        content = response.content
+        if isinstance(content, list):
+            content = " ".join(str(c) for c in content)
+        data = _parse_json_response(str(content))
+        if data.get("reply"):
+            return bool(data.get("consent_detected")), str(data["reply"])
+    except Exception:
+        logger.exception("Consent SLM failed")
+    if user_message and _is_consent(user_message):
+        return True, "Thank you for your consent! Let's get started on your project."
+    if not user_message:
+        return False, CONSENT_MESSAGE.format(privacy_url=settings.ATI_PRIVACY_URL)
+    return False, (
+        f"I need your consent to continue. Please review our privacy policy at "
+        f"{settings.ATI_PRIVACY_URL} and let me know you agree."
+    )
+
+
+def _rule_based_readiness(collected: dict) -> tuple[bool, float, list[str]]:
+    """Fast rule check: project_type + 3 other fields filled."""
+    missing = [f for f in REQUIREMENT_FIELDS if not collected.get(f)]
+    filled = len(REQUIREMENT_FIELDS) - len(missing)
+    has_type = bool(collected.get("project_type"))
+    complete = has_type and filled >= 4
+    score = min(filled / len(REQUIREMENT_FIELDS), 1.0) if has_type else filled / len(REQUIREMENT_FIELDS) * 0.5
+    if complete:
+        score = max(score, 0.85)
+    return complete, score, missing
+
+
+def _evaluate_readiness(state: OnboardingState) -> None:
+    collected = state.get("collected_requirements", {})
+    rule_complete, rule_score, rule_missing = _rule_based_readiness(collected)
+
+    conversation = "\n".join(
+        f"{m['role']}: {m['content']}" for m in state.get("messages", [])[-10:]
+    )
+    prompt = COMPLETION_EVAL_PROMPT.format(
+        collected=json.dumps(collected, indent=2),
+        conversation=conversation[:2000],
+    )
+    try:
+        llm = get_chat_llm(temperature=0.1)
+        response = llm.invoke([HumanMessage(content=prompt)])
+        content = response.content
+        if isinstance(content, list):
+            content = " ".join(str(c) for c in content)
+        data = _parse_json_response(str(content))
+        slm_complete = bool(data.get("complete", False))
+        slm_score = float(data.get("score", 0.0))
+        slm_missing = data.get("missing", []) or []
+        state["requirements_complete"] = rule_complete or slm_complete
+        state["readiness_score"] = max(rule_score, slm_score)
+        state["missing_fields"] = slm_missing if slm_missing else rule_missing
+        if rule_complete:
+            state["requirements_complete"] = True
+            state["readiness_score"] = max(state["readiness_score"], 0.85)
+    except Exception:
+        logger.exception("Readiness evaluation failed")
+        state["requirements_complete"] = rule_complete
+        state["readiness_score"] = rule_score
+        state["missing_fields"] = rule_missing
+
+
+def _after_consent(state: OnboardingState, reply: str) -> None:
+    state["consent_given"] = True
+    state["consent_ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    if state.get("client_name"):
+        create_client_workspace(state["client_name"])
+        display = state["client_name"].replace("_", " ")
+        reply = (
+            f"Thank you, {display}! Your profile is linked to this project.\n\n"
+            "What kind of project can we help you with today?"
+        )
+        state["stage"] = "requirements"
+    else:
+        state["stage"] = "identity"
+        reply = reply or "Thank you! Please confirm your full name for this project."
+    state["pending_reply"] = reply
+    _append_message(state, "assistant", reply)
+
+
 def greeting_node(state: OnboardingState) -> OnboardingState:
     state["stage"] = "greeting"
     reply = CONSENT_MESSAGE.format(privacy_url=settings.ATI_PRIVACY_URL)
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
+    state["consent_prompt_sent"] = True
     state["stage"] = "consent"
     return state
+
+
+def _is_privacy_question(text: str) -> bool:
+    normalized = text.strip().lower()
+    triggers = ("privacy", "what data", "tell me more", "how is my data", "data collection", "policy")
+    return any(t in normalized for t in triggers)
 
 
 def consent_node(state: OnboardingState) -> OnboardingState:
     state["stage"] = "consent"
     last_user = _last_user_text(state)
 
-    if last_user and _is_consent(last_user):
-        state["consent_given"] = True
-        state["consent_ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        reply = "Thank you! What is your full name?"
-        state["pending_reply"] = reply
-        _append_message(state, "assistant", reply)
-        state["stage"] = "identity"
-    elif last_user:
-        reply = (
-            "I need your consent before we can continue. "
-            f"Please review our privacy policy at {settings.ATI_PRIVACY_URL} "
-            'and type "I agree" to proceed.'
-        )
-        state["pending_reply"] = reply
-        _append_message(state, "assistant", reply)
-    else:
+    if last_user:
+        if _is_consent(last_user):
+            _after_consent(state, "Thank you for your consent! Let's get started on your project.")
+        elif _is_privacy_question(last_user):
+            detected, reply = _classify_consent(state, last_user)
+            if detected:
+                _after_consent(state, reply)
+            else:
+                state["pending_reply"] = reply
+                _append_message(state, "assistant", reply)
+        else:
+            reply = (
+                f"I need your consent to continue. Please review our privacy policy at "
+                f"{settings.ATI_PRIVACY_URL} and let me know you agree."
+            )
+            state["pending_reply"] = reply
+            _append_message(state, "assistant", reply)
+    elif not state.get("consent_prompt_sent"):
         reply = CONSENT_MESSAGE.format(privacy_url=settings.ATI_PRIVACY_URL)
         state["pending_reply"] = reply
+        _append_message(state, "assistant", reply)
+        state["consent_prompt_sent"] = True
 
     return state
 
@@ -139,13 +268,11 @@ def identity_node(state: OnboardingState) -> OnboardingState:
     state["stage"] = "identity"
     last_user = _last_user_text(state)
 
-    if last_user and not state.get("client_name"):
-        if _is_consent(last_user):
-            reply = "Thank you! What is your full name?"
-            state["pending_reply"] = reply
-            _append_message(state, "assistant", reply)
-            return state
+    if state.get("client_name") and state.get("consent_given"):
+        state["stage"] = "requirements"
+        return state
 
+    if last_user:
         name = _extract_name(last_user)
         if name:
             state["client_name"] = name
@@ -185,6 +312,7 @@ def requirements_node(state: OnboardingState) -> OnboardingState:
 
     _update_collected_requirements(state, last_user)
     reply = _invoke_llm(state, last_user)
+    _evaluate_readiness(state)
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
     state["file_context"] = ""
@@ -201,6 +329,7 @@ def clarify_node(state: OnboardingState) -> OnboardingState:
         prompt = f"{prompt}\n\n[Uploaded file context]: {file_ctx}"
 
     reply = _invoke_llm(state, prompt)
+    _evaluate_readiness(state)
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
     state["file_context"] = ""
@@ -281,8 +410,8 @@ def _last_user_text(state: OnboardingState) -> str | None:
 
 
 def _is_consent(text: str) -> bool:
-    normalized = text.strip().lower()
-    return normalized in {"i agree", "agree", "yes i agree", "i consent", "consent"}
+    from app.agent.routing import is_consent_message
+    return is_consent_message(text)
 
 
 def _extract_name(text: str) -> str | None:

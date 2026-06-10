@@ -1,9 +1,88 @@
 AWESOME TECHNOLOGIES INC. (ATI) — Service Catalogue
 
-ATI is a third-party technology service provider specializing in mortgage automation, custom software development, and digital solutions for mortgage lenders, brokers, and loan officers.
+ATI is a third-party technology service provider specializing in custom software development, mobile applications, web solutions, system integrations, and digital solutions for businesses across industries including mortgage, lending, and financial services.
 
 CONTACT: support@awesometechinc.com | 877-284-4968
 WEBSITE: https://awesometechinc.com
+
+=== MOBILE APP DEVELOPMENT ===
+ATI builds native and cross-platform mobile applications for iOS and Android.
+
+Platforms and approaches:
+- Native iOS (Swift) and Android (Kotlin/Java)
+- Cross-platform development (React Native, Flutter)
+- Progressive Web Apps (PWA) for mobile-friendly experiences
+
+Common mobile app features ATI delivers:
+- User authentication and secure login (biometrics, SSO)
+- Push notifications and in-app messaging
+- Offline mode and local data sync
+- Payment processing and in-app purchases
+- GPS, maps, and location-based services
+- Camera, photo upload, and document scanning
+- API integration with backend systems and third-party services
+- Admin dashboards and analytics
+
+Mobile app project workflow:
+Discovery → UX/UI design → Prototyping → Development → QA testing → App Store / Play Store submission → Ongoing maintenance and updates
+
+Typical onboarding questions for mobile projects:
+- Target platforms (iOS, Android, or both)
+- Target users and primary use cases
+- Must-have features for version 1 (MVP)
+- Existing backend or API to connect to
+- Timeline and launch date
+- Design references or brand guidelines
+
+=== GENERAL WEBSITE DEVELOPMENT ===
+ATI develops corporate, marketing, and business websites beyond the mortgage industry.
+
+Capabilities:
+- Responsive design for desktop, tablet, and mobile browsers
+- Content management systems (CMS) integration
+- Lead generation forms and contact workflows
+- SEO optimization and performance tuning
+- E-commerce and product catalogues
+- Member portals and customer dashboards
+- Third-party integrations (analytics, CRM, payment gateways)
+
+Workflow: Discovery → Wireframes & Design → Development → Integration → Testing → Deployment → Ongoing Support
+
+=== SOFTWARE INTEGRATION AND API DEVELOPMENT ===
+ATI connects business systems through APIs, middleware, and custom integrations.
+
+Integration services:
+- REST and SOAP API development
+- CRM integration (Salesforce, HubSpot, custom CRM)
+- ERP and accounting system connections
+- Payment gateway and fintech integrations
+- Webhook and event-driven architectures
+- Data migration and ETL pipelines
+- Legacy system modernization
+
+For lending clients, ATI also integrates Loan Origination Systems (LOS) and CRM platforms — see mortgage-specific sections below.
+
+=== UI/UX DESIGN AND BRANDING ===
+ATI provides user experience design and visual branding for web and mobile products.
+
+Services include:
+- User research and persona development
+- Wireframes and interactive prototypes
+- Visual design and design systems
+- Logo design and brand identity
+- Accessibility (WCAG) compliance review
+- Usability testing and conversion optimization
+
+=== CLOUD AND DEVOPS ===
+ATI supports deployment, hosting, and operational reliability for web and mobile products.
+
+Services include:
+- Cloud hosting setup (AWS, Azure, Google Cloud)
+- CI/CD pipeline configuration
+- Containerization (Docker, Kubernetes)
+- SSL, security hardening, and backup strategies
+- Monitoring, logging, and incident response
+- Performance optimization and scaling
 
 === MORTGAGE WEBSITE DEVELOPMENT SERVICES ===
 ATI provides mortgage website development services that blend advanced technology with exceptional design. We create websites for mortgage companies, brokers, and loan officers with intuitive designs that guide users through the entire lending process.
