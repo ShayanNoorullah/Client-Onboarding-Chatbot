@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.schemas import ProfileUpdateRequest
+from app.api.schemas import ProfileUpdateRequest, SessionUpdateRequest
+from app.agent.routing import can_request_manual_brief
 from app.auth.dependencies import get_current_user
 from app.auth.passwords import hash_password
 from app.models.brief import Brief
@@ -35,8 +36,11 @@ async def create_session(user: User = Depends(get_current_user)):
 
 
 @router.get("/sessions")
-async def list_sessions(user: User = Depends(get_current_user)):
-    sessions = await mongo_session_store.list_for_user(str(user.id))
+async def list_sessions(
+    user: User = Depends(get_current_user),
+    q: str | None = Query(default=None, max_length=100),
+):
+    sessions = await mongo_session_store.list_for_user(str(user.id), q=q)
     return {"sessions": sessions}
 
 
@@ -63,7 +67,40 @@ async def get_session(session_id: str, user: User = Depends(get_current_user)):
         "missing_fields": state.get("missing_fields", []),
         "brief_download_url": brief_url,
         "consent_given": state.get("consent_given", False),
+        "brief_version": state.get("brief_version", 1),
+        "show_generate_brief": can_request_manual_brief(state),
     }
+
+
+@router.patch("/sessions/{session_id}")
+async def update_session(
+    session_id: str,
+    body: SessionUpdateRequest,
+    user: User = Depends(get_current_user),
+):
+    try:
+        await mongo_session_store.get(session_id, str(user.id))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not your session")
+
+    fields_set = body.model_fields_set
+    if "title" not in fields_set and "pinned" not in fields_set:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    try:
+        doc = await mongo_session_store.update_metadata(
+            session_id,
+            title=body.title,
+            pinned=body.pinned,
+            title_set="title" in fields_set,
+            pinned_set="pinned" in fields_set,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {"session": doc.to_summary()}
 
 
 @router.delete("/sessions/{session_id}")

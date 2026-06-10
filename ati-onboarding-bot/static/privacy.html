@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy — Client Onboarding Agent</title>
+  <script>(function(){try{var t=localStorage.getItem("ati_theme")||"system";if(["system","light","dark"].indexOf(t)<0)t="system";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","system");}})();</script>
+  <link href="/static/css/app.css" rel="stylesheet">
+  <link href="/static/css/theme.css" rel="stylesheet">
+  <link href="/static/css/settings.css" rel="stylesheet">
+  <link href="/static/css/site.css" rel="stylesheet">
+</head>
+<body data-page="privacy">
+  <div id="siteNav"></div>
+  <div class="site-page">
+    <div class="site-container">
+      <div class="site-hero">
+        <h1 id="privacyTitle">Privacy Policy</h1>
+        <p id="privacySubtitle">Awesome Technologies Inc.</p>
+      </div>
+      <div class="site-card" id="privacyContact"></div>
+      <div id="privacySections"></div>
+    </div>
+  </div>
+  <script src="/static/js/theme.js?v=3.4.0"></script>
+  <script src="/static/js/settings.js?v=3.4.0"></script>
+  <script src="/static/js/api.js?v=3.2.1"></script>
+  <script src="/static/js/site-nav.js?v=3.4.0"></script>
+  <script>
+    async function loadPrivacy() {
+      const res = await fetch("/api/public/privacy");
+      const data = await res.json();
+      document.getElementById("privacyTitle").textContent = data.title || "Privacy Policy";
+      const contact = data.contact || {};
+      document.getElementById("privacyContact").innerHTML = `
+        <p><strong>Email:</strong> <a href="mailto:${contact.email}">${contact.email || ""}</a></p>
+        <p><strong>Phone:</strong> ${contact.phone || ""}</p>
+        <p><strong>Address:</strong> ${contact.address || ""}</p>
+      `;
+      const container = document.getElementById("privacySections");
+      container.innerHTML = (data.sections || []).map((s) => `
+        <section class="privacy-section site-card">
+          <h2>${s.title}</h2>
+          <p>${(s.body || "").replace(/\n/g, "<br>")}</p>
+        </section>
+      `).join("");
+    }
+    loadPrivacy().catch(() => {
+      document.getElementById("privacySections").innerHTML =
+        '<div class="site-card"><p>Unable to load privacy policy. Please contact support@awesometechinc.com.</p></div>';
+    });
+  </script>
+</body>
+</html>

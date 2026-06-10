@@ -23,8 +23,9 @@ def test_uses_slm():
 
 def test_get_suggestions_consent():
     suggestions = get_suggestions("consent")
-    assert "I agree" in suggestions
-    assert "Yes, I consent" in suggestions
+    assert "Tell me more about privacy" in suggestions
+    assert "What data do you collect?" in suggestions
+    assert "I agree" not in suggestions
 
 
 def test_get_suggestions_requirements_initial():

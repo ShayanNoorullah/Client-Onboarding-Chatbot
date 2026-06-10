@@ -75,19 +75,42 @@ def _append_transition(state: OnboardingState, text: str) -> None:
     state["messages"].append({"role": "assistant", "content": text})
 
 
+def _reopen_completed_session(state: OnboardingState) -> None:
+    """Allow the user to add more info and update an existing brief."""
+    state["done"] = False
+    state["brief_update_pending"] = True
+    state["auto_summarising"] = False
+    state["manual_brief_requested"] = False
+    if state.get("file_context"):
+        state["stage"] = "clarify"
+    else:
+        state["stage"] = "requirements"
+    note = (
+        "Welcome back! I'll keep gathering details and can update your project brief "
+        "when you're ready — use Generate Brief or keep chatting."
+    )
+    state["pending_reply"] = note
+    _append_transition(state, note)
+
+
 def process_message(state: OnboardingState, user_message: str) -> OnboardingState:
     """Process a user message — one stage per message, no chaining."""
-    from app.agent.routing import is_consent_message, should_summarise
+    from app.agent.routing import should_summarise
 
     state["messages"].append({"role": "user", "content": user_message})
     stage = state.get("stage", "greeting")
 
-    if is_consent_message(user_message) and stage in ("greeting", "consent"):
-        state["stage"] = "consent"
-        return consent_node(state)
+    if state.get("done"):
+        _reopen_completed_session(state)
+        if state.get("file_context"):
+            state = clarify_node(state)
+        else:
+            state = requirements_node(state)
+        return state
 
     if stage == "greeting":
-        return greeting_node(state)
+        state["stage"] = "consent"
+        return consent_node(state)
     if stage == "consent":
         return consent_node(state)
     if stage == "identity":
@@ -109,3 +132,25 @@ def process_message(state: OnboardingState, user_message: str) -> OnboardingStat
         return summarise_node(state)
 
     return state
+
+
+def request_manual_brief(state: OnboardingState) -> OnboardingState:
+    """Generate brief on user request, bypassing auto-readiness gates."""
+    from app.agent.routing import can_request_manual_brief
+
+    if not can_request_manual_brief(state):
+        if not state.get("consent_given"):
+            reply = "Please complete the privacy consent step before generating a brief."
+        elif not state.get("client_name"):
+            reply = "Please share your name first so I can set up your project workspace."
+        else:
+            reply = "Your brief is already complete. Send a message if you'd like to add more details."
+        state["pending_reply"] = reply
+        _append_transition(state, reply)
+        return state
+
+    state["manual_brief_requested"] = True
+    transition = "Generating your project brief on your request..."
+    state["pending_reply"] = transition
+    _append_transition(state, transition)
+    return summarise_node(state)

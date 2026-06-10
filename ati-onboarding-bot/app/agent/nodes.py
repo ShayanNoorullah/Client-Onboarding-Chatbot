@@ -7,12 +7,12 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.agent.prompts import (
     COMPLETION_EVAL_PROMPT,
-    CONSENT_MESSAGE,
     CONSENT_SLM_PROMPT,
     SUMMARY_EXTRACTION_PROMPT,
     build_slm_prompt,
 )
 from app.agent.state import OnboardingState
+from app.agent.routing import MIN_FIELD_VALUE_LEN
 from app.agent.task_router import (
     FALLBACK_QUESTIONS,
     REQUIREMENT_FIELDS,
@@ -20,13 +20,15 @@ from app.agent.task_router import (
     get_next_fallback_question,
     normalize_project_type,
 )
+from app.agent.term_glossary import expand_terms
 from app.config import settings
 from app.llm.factory import get_chat_llm
 from app.rag.retriever import query_combined_rag
 from app.storage.encryptor import encrypt_log
 from app.storage.file_manager import (
-    create_client_workspace,
-    get_conversation_log_path,
+    create_project_workspace,
+    get_project_folder_from_state,
+    write_conversation_log,
 )
 from app.storage.summary_writer import write_summary
 
@@ -49,7 +51,11 @@ def _get_rag_context(state: OnboardingState, query: str = "") -> str:
     project_type = state.get("collected_requirements", {}).get("project_type")
     rag_query = build_rag_query(query, project_type)
     try:
-        return query_combined_rag(rag_query, state.get("client_name"))
+        return query_combined_rag(
+            rag_query,
+            state.get("client_name"),
+            state.get("workspace_slug"),
+        )
     except Exception:
         logger.exception("RAG query failed")
         return ""
@@ -58,6 +64,7 @@ def _get_rag_context(state: OnboardingState, query: str = "") -> str:
 def _update_collected_requirements(state: OnboardingState, user_message: str) -> None:
     collected = state.setdefault("collected_requirements", {})
     asked = state.get("requirements_asked", 0)
+    expanded = expand_terms(user_message)
 
     detected_type = normalize_project_type(user_message)
     if detected_type and not collected.get("project_type"):
@@ -68,7 +75,7 @@ def _update_collected_requirements(state: OnboardingState, user_message: str) ->
         if field == "project_type" and collected.get("project_type"):
             collected[field] = collected["project_type"]
         else:
-            collected[field] = user_message.strip()[:500]
+            collected[field] = expanded.strip()[:500]
     state["requirements_asked"] = asked + 1
 
 
@@ -80,6 +87,7 @@ def _invoke_llm(state: OnboardingState, user_input: str | None = None) -> str:
         assets_count=len(state.get("assets", [])),
         rag_context=rag_context,
         collected_requirements=state.get("collected_requirements", {}),
+        user_memory_facts=state.get("user_memory_facts"),
     )
 
     lc_messages = [SystemMessage(content=system)]
@@ -144,22 +152,33 @@ def _classify_consent(state: OnboardingState, user_message: str = "") -> tuple[b
             return bool(data.get("consent_detected")), str(data["reply"])
     except Exception:
         logger.exception("Consent SLM failed")
-    if user_message and _is_consent(user_message):
-        return True, "Thank you for your consent! Let's get started on your project."
+    privacy_link = settings.ATI_PRIVACY_URL
     if not user_message:
-        return False, CONSENT_MESSAGE.format(privacy_url=settings.ATI_PRIVACY_URL)
+        return False, (
+            "Hello! I'm the Client Onboarding Agent. Before we begin, Awesome Technologies Inc. "
+            f"collects the information you share to prepare your project brief. "
+            f"Review our privacy policy at {privacy_link} and let me know when you're "
+            "comfortable proceeding."
+        )
     return False, (
-        f"I need your consent to continue. Please review our privacy policy at "
-        f"{settings.ATI_PRIVACY_URL} and let me know you agree."
+        "I wasn't able to confirm your consent just now. Please review our privacy policy at "
+        f"{privacy_link} and reply in your own words when you're comfortable continuing."
     )
 
 
+def _field_substantive(value: str | None) -> bool:
+    return bool(value and len(str(value).strip()) >= MIN_FIELD_VALUE_LEN)
+
+
 def _rule_based_readiness(collected: dict) -> tuple[bool, float, list[str]]:
-    """Fast rule check: project_type + 3 other fields filled."""
-    missing = [f for f in REQUIREMENT_FIELDS if not collected.get(f)]
+    """Fast rule check: project_type + 5 other substantive fields."""
+    missing = []
+    for f in REQUIREMENT_FIELDS:
+        if not _field_substantive(collected.get(f)):
+            missing.append(f)
     filled = len(REQUIREMENT_FIELDS) - len(missing)
-    has_type = bool(collected.get("project_type"))
-    complete = has_type and filled >= 4
+    has_type = _field_substantive(collected.get("project_type"))
+    complete = has_type and filled >= 6
     score = min(filled / len(REQUIREMENT_FIELDS), 1.0) if has_type else filled / len(REQUIREMENT_FIELDS) * 0.5
     if complete:
         score = max(score, 0.85)
@@ -187,24 +206,30 @@ def _evaluate_readiness(state: OnboardingState) -> None:
         slm_complete = bool(data.get("complete", False))
         slm_score = float(data.get("score", 0.0))
         slm_missing = data.get("missing", []) or []
-        state["requirements_complete"] = rule_complete or slm_complete
+        state["slm_readiness_complete"] = slm_complete
+        state["requirements_complete"] = rule_complete and slm_complete
         state["readiness_score"] = max(rule_score, slm_score)
         state["missing_fields"] = slm_missing if slm_missing else rule_missing
-        if rule_complete:
-            state["requirements_complete"] = True
-            state["readiness_score"] = max(state["readiness_score"], 0.85)
     except Exception:
         logger.exception("Readiness evaluation failed")
-        state["requirements_complete"] = rule_complete
+        state["slm_readiness_complete"] = False
+        state["requirements_complete"] = False
         state["readiness_score"] = rule_score
         state["missing_fields"] = rule_missing
+
+
+def _ensure_project_workspace(state: OnboardingState) -> None:
+    if state.get("workspace_slug") or not state.get("client_name"):
+        return
+    _, slug = create_project_workspace(state["client_name"], state.get("session_id", ""))
+    state["workspace_slug"] = slug
 
 
 def _after_consent(state: OnboardingState, reply: str) -> None:
     state["consent_given"] = True
     state["consent_ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     if state.get("client_name"):
-        create_client_workspace(state["client_name"])
+        _ensure_project_workspace(state)
         display = state["client_name"].replace("_", " ")
         reply = (
             f"Thank you, {display}! Your profile is linked to this project.\n\n"
@@ -218,20 +243,31 @@ def _after_consent(state: OnboardingState, reply: str) -> None:
     _append_message(state, "assistant", reply)
 
 
+CONSENT_PLACEHOLDER = (
+    "Welcome! I'm preparing a brief privacy notice for you — one moment..."
+)
+
+
 def greeting_node(state: OnboardingState) -> OnboardingState:
     state["stage"] = "greeting"
-    reply = CONSENT_MESSAGE.format(privacy_url=settings.ATI_PRIVACY_URL)
-    state["pending_reply"] = reply
-    _append_message(state, "assistant", reply)
+    state["pending_reply"] = CONSENT_PLACEHOLDER
+    _append_message(state, "assistant", CONSENT_PLACEHOLDER)
     state["consent_prompt_sent"] = True
+    state["consent_pending_slm"] = True
     state["stage"] = "consent"
     return state
 
 
-def _is_privacy_question(text: str) -> bool:
-    normalized = text.strip().lower()
-    triggers = ("privacy", "what data", "tell me more", "how is my data", "data collection", "policy")
-    return any(t in normalized for t in triggers)
+def generate_slm_consent_intro(state: OnboardingState) -> OnboardingState:
+    """Replace placeholder with SLM-personalised consent message."""
+    _, reply = _classify_consent(state, "")
+    if state.get("messages") and state["messages"][-1].get("content") == CONSENT_PLACEHOLDER:
+        state["messages"][-1]["content"] = reply
+    else:
+        _append_message(state, "assistant", reply)
+    state["pending_reply"] = reply
+    state["consent_pending_slm"] = False
+    return state
 
 
 def consent_node(state: OnboardingState) -> OnboardingState:
@@ -239,24 +275,14 @@ def consent_node(state: OnboardingState) -> OnboardingState:
     last_user = _last_user_text(state)
 
     if last_user:
-        if _is_consent(last_user):
-            _after_consent(state, "Thank you for your consent! Let's get started on your project.")
-        elif _is_privacy_question(last_user):
-            detected, reply = _classify_consent(state, last_user)
-            if detected:
-                _after_consent(state, reply)
-            else:
-                state["pending_reply"] = reply
-                _append_message(state, "assistant", reply)
+        detected, reply = _classify_consent(state, last_user)
+        if detected:
+            _after_consent(state, reply or "Thank you! Let's get started on your project.")
         else:
-            reply = (
-                f"I need your consent to continue. Please review our privacy policy at "
-                f"{settings.ATI_PRIVACY_URL} and let me know you agree."
-            )
             state["pending_reply"] = reply
             _append_message(state, "assistant", reply)
     elif not state.get("consent_prompt_sent"):
-        reply = CONSENT_MESSAGE.format(privacy_url=settings.ATI_PRIVACY_URL)
+        _, reply = _classify_consent(state, "")
         state["pending_reply"] = reply
         _append_message(state, "assistant", reply)
         state["consent_prompt_sent"] = True
@@ -276,7 +302,7 @@ def identity_node(state: OnboardingState) -> OnboardingState:
         name = _extract_name(last_user)
         if name:
             state["client_name"] = name
-            create_client_workspace(name)
+            _ensure_project_workspace(state)
             display_name = name.replace("_", " ")
             reply = (
                 f"Got it, {display_name}! I'll use this name for your project workspace.\n\n"
@@ -311,7 +337,8 @@ def requirements_node(state: OnboardingState) -> OnboardingState:
         return state
 
     _update_collected_requirements(state, last_user)
-    reply = _invoke_llm(state, last_user)
+    state["requirements_turn_count"] = state.get("requirements_turn_count", 0) + 1
+    reply = _invoke_llm(state, expand_terms(last_user))
     _evaluate_readiness(state)
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
@@ -328,7 +355,8 @@ def clarify_node(state: OnboardingState) -> OnboardingState:
     if file_ctx:
         prompt = f"{prompt}\n\n[Uploaded file context]: {file_ctx}"
 
-    reply = _invoke_llm(state, prompt)
+    state["requirements_turn_count"] = state.get("requirements_turn_count", 0) + 1
+    reply = _invoke_llm(state, expand_terms(prompt))
     _evaluate_readiness(state)
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
@@ -371,10 +399,21 @@ def summarise_node(state: OnboardingState) -> OnboardingState:
 
     client_name = state.get("client_name", "Unknown")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    ref_id = f"{client_name}_{now}"
+    is_update = bool(state.get("brief_id") or state.get("brief_update_pending") or state.get("summary_written"))
+    version = state.get("brief_version", 1)
+    if is_update:
+        version = version + 1
+        state["brief_version"] = version
+        ref_id = state.get("ref_id") or f"{client_name}_{now}"
+        if not ref_id.endswith(f"_v{version}"):
+            ref_id = f"{ref_id}_v{version}"
+    else:
+        ref_id = f"{client_name}_{now}"
+        state["brief_version"] = 1
     state["ref_id"] = ref_id
 
-    client_folder = create_client_workspace(client_name)
+    _ensure_project_workspace(state)
+    client_folder = get_project_folder_from_state(state)
     write_summary(client_folder, state)
 
     log_data = {
@@ -385,18 +424,34 @@ def summarise_node(state: OnboardingState) -> OnboardingState:
         "requirements": requirements,
         "assets": state.get("assets"),
         "ref_id": ref_id,
+        "brief_version": state.get("brief_version", 1),
     }
-    encrypt_log(log_data, get_conversation_log_path(client_folder))
+    log_path = write_conversation_log(client_folder, log_data)
+    if settings.ENCRYPTION_KEY:
+        try:
+            encrypt_log(log_data, log_path)
+        except Exception:
+            logger.exception("Failed to write encrypted conversation log")
 
     state["summary_written"] = True
     state["done"] = True
+    state["manual_brief_requested"] = False
+    state["brief_update_pending"] = False
+    state["auto_summarising"] = False
 
-    reply = (
-        "Let me prepare your project brief now...\n\n"
-        f"Your brief is saved! An ATI advisor will review it and contact you within "
-        f"3 business days. Your reference ID is {ref_id}.\n\n"
-        f"Questions? Reach us at {settings.ATI_SUPPORT_EMAIL} or {settings.ATI_PHONE}."
-    )
+    if is_update:
+        reply = (
+            "I've updated your project brief with the latest information.\n\n"
+            f"Your reference ID is {ref_id}. An ATI advisor will review the changes.\n\n"
+            f"Questions? Reach us at {settings.ATI_SUPPORT_EMAIL} or {settings.ATI_PHONE}."
+        )
+    else:
+        reply = (
+            "Let me prepare your project brief now...\n\n"
+            f"Your brief is saved! An ATI advisor will review it and contact you within "
+            f"3 business days. Your reference ID is {ref_id}.\n\n"
+            f"Questions? Reach us at {settings.ATI_SUPPORT_EMAIL} or {settings.ATI_PHONE}."
+        )
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
     return state
@@ -407,11 +462,6 @@ def _last_user_text(state: OnboardingState) -> str | None:
         if msg.get("role") == "user":
             return msg.get("content", "")
     return None
-
-
-def _is_consent(text: str) -> bool:
-    from app.agent.routing import is_consent_message
-    return is_consent_message(text)
 
 
 def _extract_name(text: str) -> str | None:

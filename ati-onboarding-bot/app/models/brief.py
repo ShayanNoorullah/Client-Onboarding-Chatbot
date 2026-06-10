@@ -12,7 +12,9 @@ class Brief(Document):
     markdown: str
     recommended_services: list[str] = Field(default_factory=list)
     file_path: str | None = None
+    version: int = 1
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime | None = None
 
     class Settings:
         name = "briefs"
@@ -26,6 +28,8 @@ class Brief(Document):
             "client_name": self.client_name,
             "recommended_services": self.recommended_services,
             "file_path": self.file_path,
+            "version": self.version,
             "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "download_url": f"/api/briefs/{self.id}/download",
         }

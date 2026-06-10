@@ -89,7 +89,7 @@ Additional AI capabilities:
         ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  client_data/{ClientName}/                                               │
-│    assets/ · vectors/ · summary.md · conversation_log.json (encrypted)   │
+│    assets/ · vectors/ · summary.md · conversation_log.json · .enc       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -507,7 +507,8 @@ GET /health → { "status": "ok"|"degraded", "ollama": { ... } }
 | Client doc vectors | ChromaDB binary | `client_data/{name}/vectors/` | No |
 | Uploaded files | Original binary | `client_data/{name}/assets/` | No |
 | Project brief | Markdown | `client_data/{name}/summary.md` | No |
-| Conversation audit | JSON | `client_data/{name}/conversation_log.json` | Yes (Fernet) |
+| Conversation audit | JSON | `client_data/{name}/.../conversation_log.json` | Readable JSON (schema v1) |
+| Conversation backup | ENC | `client_data/{name}/.../conversation_log.enc` | Yes (Fernet) |
 
 ---
 
@@ -889,7 +890,8 @@ ClientName/
 ├── assets/              # Uploaded files
 ├── vectors/             # Per-client ChromaDB (uploaded doc embeddings)
 ├── summary.md           # Generated project brief (markdown)
-└── conversation_log.json # Encrypted full session log
+├── conversation_log.json # Structured UTF-8 session log (schema v1)
+└── conversation_log.enc  # Fernet-encrypted backup of same data
 ```
 
 ### Name sanitisation (`app/storage/file_manager.py`)
@@ -1137,7 +1139,22 @@ Run: `pytest tests/ -v`
 
 ---
 
-## 20. Roadmap
+## 20. v3.1 Architecture (UI, Quality, Learning)
+
+| Area | Implementation |
+|------|----------------|
+| **Admin UI** | `static/css/admin.css`, `admin-layout.js` — white sidebar; pages: dashboard, users, briefs, sessions, health |
+| **Public pages** | `about.html`, `contact.html` linked from login/chat/admin |
+| **Chroma** | `langchain-chroma` package (replaces deprecated `langchain_community.vectorstores.Chroma`) |
+| **Readiness** | Stricter gates: 5+ turns, 6/7 substantive fields, SLM `complete=true` required for auto-brief |
+| **Terms** | `app/agent/term_glossary.py` — Gen Z, B2B, MVP expansions |
+| **Consent** | Instant placeholder → async SLM intro; SLM classifier on all consent replies |
+| **Project folders** | `client_data/{name}/{YYYY-MM-DD_sessionid}/` per project |
+| **Learning** | `UserMemory` MongoDB model; `learning_service.py` — per-user facts + global `ati_kb/learned_patterns.txt` |
+
+---
+
+## 21. Roadmap
 
 Recommended next steps (not yet implemented):
 

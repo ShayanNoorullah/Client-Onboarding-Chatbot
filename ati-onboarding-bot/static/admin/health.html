@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Users — ATI Admin</title>
+  <title>Health — ATI Admin</title>
   <script>(function(){try{var t=localStorage.getItem("ati_theme")||"system";if(["system","light","dark"].indexOf(t)<0)t="system";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","system");}})();</script>
   <link href="/static/css/app.css" rel="stylesheet">
   <link href="/static/css/theme.css" rel="stylesheet">
@@ -13,11 +13,23 @@
 <body>
   <div id="adminRoot" class="admin-layout"></div>
   <template id="pageTemplate">
+    <div class="admin-stats">
+      <div class="admin-stat-card">
+        <div class="label">Service Status</div>
+        <p class="value" id="healthStatus">—</p>
+      </div>
+      <div class="admin-stat-card">
+        <div class="label">Version</div>
+        <p class="value" id="healthVersion">—</p>
+      </div>
+    </div>
     <div class="admin-card">
-      <table class="admin-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody id="usersTable"></tbody>
-      </table>
+      <h6>Ollama</h6>
+      <table class="admin-table"><tbody id="ollamaTable"></tbody></table>
+    </div>
+    <div class="admin-card">
+      <h6>Raw Response</h6>
+      <pre id="healthRaw" style="font-size:12px;overflow:auto;margin:0;"></pre>
     </div>
   </template>
   <script src="/static/js/theme.js?v=3.4.0"></script>

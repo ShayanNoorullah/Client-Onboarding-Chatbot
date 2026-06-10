@@ -9,6 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.api.admin_routes import router as admin_router
 from app.api.auth_routes import router as auth_router
 from app.api.brief_routes import router as brief_router
+from app.api.public_routes import router as public_router
 from app.api.routes import router as chat_router
 from app.api.user_routes import router as user_router
 from app.config import settings
@@ -26,13 +27,14 @@ async def lifespan(app: FastAPI):
     await close_mongodb()
 
 
-app = FastAPI(title="ATI Onboarding Chatbot", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="Client Onboarding Agent", version="3.2.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET_KEY)
 
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(admin_router)
 app.include_router(brief_router)
+app.include_router(public_router)
 app.include_router(chat_router)
 
 
@@ -42,8 +44,8 @@ async def health():
     status = "ok" if ollama["ollama_reachable"] and not ollama["missing"] else "degraded"
     return {
         "status": status,
-        "service": "ATI Onboarding Bot",
-        "version": "3.0.0",
+        "service": "Client Onboarding Agent",
+        "version": "3.2.0",
         "llm_provider": "ollama",
         "ollama": ollama,
     }

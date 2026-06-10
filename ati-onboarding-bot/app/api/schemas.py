@@ -29,3 +29,8 @@ class AdminUserUpdate(BaseModel):
     role: str | None = None
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=8)
+
+
+class SessionUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=80)
+    pinned: bool | None = None

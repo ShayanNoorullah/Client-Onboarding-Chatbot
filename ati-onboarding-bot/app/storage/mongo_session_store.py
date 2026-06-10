@@ -5,6 +5,7 @@ from typing import Any
 
 from app.agent.state import default_state
 from app.models.onboarding_session import OnboardingSessionDoc
+from app.storage.session_display import session_matches_query, sort_sessions
 
 
 class MongoSessionStore:
@@ -34,7 +35,18 @@ class MongoSessionStore:
 
     async def get(self, session_id: str, user_id: str | None = None) -> dict[str, Any]:
         if session_id in self._cache:
-            return copy.deepcopy(self._cache[session_id])
+            state = copy.deepcopy(self._cache[session_id])
+            if user_id:
+                doc = await OnboardingSessionDoc.find_one(
+                    OnboardingSessionDoc.session_id == session_id
+                )
+                if not doc:
+                    self._cache.pop(session_id, None)
+                    raise KeyError(f"Session not found: {session_id}")
+                if doc.user_id != user_id:
+                    raise PermissionError("Session does not belong to user")
+            state["session_id"] = session_id
+            return state
 
         doc = await OnboardingSessionDoc.find_one(OnboardingSessionDoc.session_id == session_id)
         if not doc:
@@ -70,16 +82,49 @@ class MongoSessionStore:
         """Sync cache update (Mongo persist happens via async wrapper)."""
         self._cache[session_id] = copy.deepcopy(state)
 
+    async def update_metadata(
+        self,
+        session_id: str,
+        *,
+        title: str | None = None,
+        pinned: bool | None = None,
+        title_set: bool = False,
+        pinned_set: bool = False,
+    ) -> OnboardingSessionDoc:
+        doc = await OnboardingSessionDoc.find_one(OnboardingSessionDoc.session_id == session_id)
+        if not doc:
+            raise KeyError(f"Session not found: {session_id}")
+
+        if title_set:
+            doc.title = title.strip() if title and title.strip() else None
+        if pinned_set:
+            doc.pinned = bool(pinned)
+            doc.pinned_at = datetime.now(timezone.utc) if doc.pinned else None
+
+        doc.updated_at = datetime.now(timezone.utc)
+        await doc.save()
+        return doc
+
     async def delete(self, session_id: str) -> None:
         self._cache.pop(session_id, None)
         doc = await OnboardingSessionDoc.find_one(OnboardingSessionDoc.session_id == session_id)
         if doc:
             await doc.delete()
 
-    async def list_for_user(self, user_id: str) -> list[dict]:
+    async def list_for_user(self, user_id: str, q: str | None = None) -> list[dict]:
         docs = await OnboardingSessionDoc.find(
             OnboardingSessionDoc.user_id == user_id
-        ).sort(-OnboardingSessionDoc.updated_at).to_list()
+        ).to_list()
+        if q:
+            docs = [d for d in docs if session_matches_query(d, q)]
+        docs = sort_sessions(docs)
+        return [d.to_summary() for d in docs]
+
+    async def list_all(self, q: str | None = None) -> list[dict]:
+        docs = await OnboardingSessionDoc.find().to_list()
+        if q:
+            docs = [d for d in docs if session_matches_query(d, q)]
+        docs = sort_sessions(docs)
         return [d.to_summary() for d in docs]
 
 

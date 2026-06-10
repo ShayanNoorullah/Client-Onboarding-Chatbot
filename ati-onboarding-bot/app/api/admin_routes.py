@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.schemas import AdminUserCreate, AdminUserUpdate
+from app.api.schemas import AdminUserCreate, AdminUserUpdate, SessionUpdateRequest
 from app.auth.dependencies import require_admin
 from app.auth.passwords import hash_password
 from app.llm.factory import check_ollama_health
@@ -113,23 +113,39 @@ async def list_sessions(
     _: User = Depends(require_admin),
     user_id: str | None = None,
     stage: str | None = None,
+    q: str | None = Query(default=None, max_length=100),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
     if user_id and stage:
-        query = OnboardingSessionDoc.find(
+        docs = await OnboardingSessionDoc.find(
             OnboardingSessionDoc.user_id == user_id,
             OnboardingSessionDoc.stage == stage,
-        )
+        ).to_list()
     elif user_id:
-        query = OnboardingSessionDoc.find(OnboardingSessionDoc.user_id == user_id)
+        docs = await OnboardingSessionDoc.find(
+            OnboardingSessionDoc.user_id == user_id
+        ).to_list()
     elif stage:
-        query = OnboardingSessionDoc.find(OnboardingSessionDoc.stage == stage)
+        docs = await OnboardingSessionDoc.find(
+            OnboardingSessionDoc.stage == stage
+        ).to_list()
     else:
-        query = OnboardingSessionDoc.find()
-    total = await query.count()
-    sessions = await query.sort(-OnboardingSessionDoc.updated_at).skip(skip).limit(limit).to_list()
-    return {"sessions": [s.to_summary() for s in sessions], "total": total}
+        docs = await OnboardingSessionDoc.find().to_list()
+
+    if q:
+        from app.storage.session_display import session_matches_query, sort_sessions
+
+        docs = [d for d in docs if session_matches_query(d, q)]
+        docs = sort_sessions(docs)
+    else:
+        from app.storage.session_display import sort_sessions
+
+        docs = sort_sessions(docs)
+
+    total = len(docs)
+    page = docs[skip : skip + limit]
+    return {"sessions": [s.to_summary() for s in page], "total": total}
 
 
 @router.get("/sessions/{session_id}")
@@ -140,15 +156,40 @@ async def get_session(session_id: str, _: User = Depends(require_admin)):
     return {"session": doc.to_summary(), "state": doc.state}
 
 
+@router.patch("/sessions/{session_id}")
+async def update_session(
+    session_id: str,
+    body: SessionUpdateRequest,
+    _: User = Depends(require_admin),
+):
+    fields_set = body.model_fields_set
+    if "title" not in fields_set and "pinned" not in fields_set:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    try:
+        doc = await mongo_session_store.update_metadata(
+            session_id,
+            title=body.title,
+            pinned=body.pinned,
+            title_set="title" in fields_set,
+            pinned_set="pinned" in fields_set,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {"session": doc.to_summary()}
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str, _: User = Depends(require_admin)):
     doc = await OnboardingSessionDoc.find_one(OnboardingSessionDoc.session_id == session_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Session not found")
     client_name = doc.state.get("client_name")
+    workspace_slug = doc.state.get("workspace_slug")
     await mongo_session_store.delete(session_id)
     if client_name:
-        delete_client_data(client_name)
+        delete_client_data(client_name, workspace_slug)
     return {"status": "deleted", "session_id": session_id}
 
 

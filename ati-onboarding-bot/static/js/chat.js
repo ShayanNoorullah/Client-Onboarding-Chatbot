@@ -2,6 +2,29 @@ let currentUser = null;
 let sessionId = null;
 let ws = null;
 let waiting = false;
+let sessionSearchTerm = "";
+let sessionSearchTimer = null;
+
+function sessionStorageKey(userId) {
+  return `ati_session_id_${userId}`;
+}
+
+function persistSessionId(id) {
+  if (!currentUser?.id || !id) return;
+  localStorage.setItem(sessionStorageKey(currentUser.id), id);
+  localStorage.removeItem("ati_session_id");
+}
+
+function clearStoredSessionId() {
+  if (typeof clearAuthSession === "function") {
+    clearAuthSession(currentUser?.id);
+    return;
+  }
+  if (currentUser?.id) {
+    localStorage.removeItem(sessionStorageKey(currentUser.id));
+  }
+  localStorage.removeItem("ati_session_id");
+}
 
 function linkify(text) {
   return text.replace(
@@ -46,7 +69,9 @@ function renderHistory(messages) {
 
 function showTyping(show) {
   const el = document.getElementById("typing");
-  if (el) el.classList.toggle("d-none", !show);
+  if (!el) return;
+  const enabled = typeof getSetting === "function" ? getSetting("showTyping") : true;
+  el.classList.toggle("d-none", !show || !enabled);
 }
 
 function setSendEnabled(enabled) {
@@ -56,7 +81,10 @@ function setSendEnabled(enabled) {
 
 function renderChips(suggestions) {
   const area = document.getElementById("chips");
+  if (!area) return;
+  const enabled = typeof getSetting === "function" ? getSetting("showChips") : true;
   area.innerHTML = "";
+  if (!enabled) return;
   (suggestions || []).forEach((text) => {
     const chip = document.createElement("button");
     chip.className = "chip";
@@ -72,6 +100,19 @@ function updateDownloadBtn(data) {
   if (data.done && data.brief_download_url) {
     btn.classList.remove("d-none");
     btn.href = data.brief_download_url;
+    const version = data.brief_version > 1 ? ` (v${data.brief_version})` : "";
+    btn.textContent = `Download brief${version}`;
+  } else {
+    btn.classList.add("d-none");
+  }
+}
+
+function updateGenerateBriefBtn(data) {
+  const btn = document.getElementById("generateBriefBtn");
+  if (!btn) return;
+  if (data.show_generate_brief && !data.done) {
+    btn.classList.remove("d-none");
+    btn.disabled = waiting;
   } else {
     btn.classList.add("d-none");
   }
@@ -83,7 +124,7 @@ function updateStatus(data) {
   if (data.auto_summarising) {
     status.textContent = "Generating your brief...";
   } else if (data.done) {
-    status.textContent = "Brief ready";
+    status.textContent = data.brief_version > 1 ? "Brief updated" : "Brief ready";
   } else if (data.requirements_complete) {
     status.textContent = "Almost ready";
   } else if (data.stage) {
@@ -93,6 +134,8 @@ function updateStatus(data) {
   }
 }
 
+const CONSENT_PLACEHOLDER = "Welcome! I'm preparing a brief privacy notice";
+
 function handleServerMessage(data) {
   waiting = false;
   showTyping(false);
@@ -101,11 +144,22 @@ function handleServerMessage(data) {
   if (data.messages?.length) {
     renderHistory(data.messages);
   } else if (data.content?.trim()) {
-    appendMessage("assistant", data.content);
+    const container = document.getElementById("messages");
+    const rows = container?.querySelectorAll(".msg-row.assistant");
+    const last = rows?.[rows.length - 1];
+    const lastText = last?.textContent || "";
+    if (lastText.includes(CONSENT_PLACEHOLDER) && !data.content.includes(CONSENT_PLACEHOLDER)) {
+      last.querySelector(".msg-bubble").innerHTML = linkify(data.content);
+      container.scrollTop = container.scrollHeight;
+      updateEmptyState();
+    } else {
+      appendMessage("assistant", data.content);
+    }
   }
 
   renderChips(data.suggestions);
   updateDownloadBtn(data);
+  updateGenerateBriefBtn(data);
   updateStatus(data);
 }
 
@@ -114,6 +168,7 @@ async function loadSessionHistory(id) {
     const data = await API.get(`/api/user/sessions/${id}`);
     renderHistory(data.messages);
     updateDownloadBtn(data);
+    updateGenerateBriefBtn(data);
     updateStatus(data);
     return data;
   } catch {
@@ -157,19 +212,36 @@ async function sendMessage(text) {
   waiting = true;
   showTyping(true);
   setSendEnabled(false);
+  const genBtn = document.getElementById("generateBriefBtn");
+  if (genBtn) genBtn.disabled = true;
   ws.send(JSON.stringify({ message: trimmed }));
+}
+
+function requestGenerateBrief() {
+  if (waiting || !ws || ws.readyState !== WebSocket.OPEN) return;
+  waiting = true;
+  showTyping(true);
+  setSendEnabled(false);
+  const genBtn = document.getElementById("generateBriefBtn");
+  if (genBtn) genBtn.disabled = true;
+  ws.send(JSON.stringify({ action: "generate_brief" }));
 }
 
 async function openSession(id, isNew = false) {
   sessionId = id;
-  localStorage.setItem("ati_session_id", sessionId);
+  persistSessionId(sessionId);
   if (ws) ws.close();
 
   const status = document.getElementById("status");
   if (status) status.textContent = "Connecting...";
 
   if (!isNew) {
-    await loadSessionHistory(sessionId);
+    const history = await loadSessionHistory(sessionId);
+    if (!history) {
+      clearStoredSessionId();
+      await newSession();
+      return;
+    }
   } else {
     clearMessages();
   }
@@ -183,21 +255,114 @@ async function newSession() {
   await openSession(data.session_id, true);
 }
 
+function getChatDisplayName(session) {
+  return session.display_name || "New chat";
+}
+
+function sessionsListUrl() {
+  const q = sessionSearchTerm.trim();
+  return q ? `/api/user/sessions?q=${encodeURIComponent(q)}` : "/api/user/sessions";
+}
+
+async function togglePinChat(id, pinned) {
+  await API.patch(`/api/user/sessions/${id}`, { pinned: !pinned });
+  await loadSessions();
+}
+
+async function renameChat(id, currentTitle) {
+  const next = window.prompt("Rename chat", currentTitle || "");
+  if (next === null) return;
+  const title = next.trim();
+  if (!title) {
+    alert("Chat name cannot be empty.");
+    return;
+  }
+  await API.patch(`/api/user/sessions/${id}`, { title });
+  await loadSessions();
+}
+
+async function deleteChat(id) {
+  if (!confirm("Delete this chat? This cannot be undone.")) return;
+  const wasActive = sessionId === id;
+  await API.delete(`/api/user/sessions/${id}`);
+  if (wasActive) {
+    clearStoredSessionId();
+    sessionId = null;
+    if (ws) ws.close();
+    const data = await API.get(sessionsListUrl());
+    const remaining = data.sessions || [];
+    if (remaining.length > 0) {
+      await openSession(remaining[0].session_id, false);
+    } else {
+      await newSession();
+    }
+    return;
+  }
+  await loadSessions();
+}
+
+function renderSessionRow(s) {
+  const row = document.createElement("div");
+  row.className = `session-row${s.session_id === sessionId ? " active" : ""}${s.pinned ? " pinned" : ""}`;
+  row.title = new Date(s.updated_at).toLocaleString();
+
+  const label = document.createElement("button");
+  label.type = "button";
+  label.className = "session-label";
+  label.textContent = getChatDisplayName(s);
+  label.addEventListener("click", () => openSession(s.session_id, false));
+
+  const actions = document.createElement("div");
+  actions.className = "session-actions";
+
+  const pinBtn = document.createElement("button");
+  pinBtn.type = "button";
+  pinBtn.className = `session-action-btn${s.pinned ? " pinned-active" : ""}`;
+  pinBtn.setAttribute("aria-label", s.pinned ? "Unpin chat" : "Pin chat");
+  pinBtn.innerHTML = '<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1 0 .707c-.48.48-1.072.588-1.503.588-.177 0-.335-.018-.46-.039l-3.134 3.134a5.927 5.927 0 0 1 .16 1.013c.046.702-.032 1.687-.72 2.375a.5.5 0 0 1-.707 0l-2.829-2.828-3.182 3.182c-.195.195-1.219.902-1.414.707s.512-1.22.707-1.414l3.182-3.182-2.828-2.829a.5.5 0 0 1 0-.707c.688-.688 1.673-.766 2.375-.72a5.92 5.92 0 0 1 1.013.16l3.134-3.134a5.96 5.96 0 0 1-.039-.461c0-.43.108-1.022.588-1.503a.5.5 0 0 1 .353-.146z"/></svg>';
+  pinBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    togglePinChat(s.session_id, s.pinned).catch((err) => alert(err.message));
+  });
+
+  const renameBtn = document.createElement("button");
+  renameBtn.type = "button";
+  renameBtn.className = "session-action-btn";
+  renameBtn.setAttribute("aria-label", "Rename chat");
+  renameBtn.innerHTML = '<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10z"/></svg>';
+  renameBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    renameChat(s.session_id, s.title || getChatDisplayName(s)).catch((err) => alert(err.message));
+  });
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "session-action-btn danger";
+  deleteBtn.setAttribute("aria-label", "Delete chat");
+  deleteBtn.innerHTML = '<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3h11V2h-11v1z"/></svg>';
+  deleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteChat(s.session_id).catch((err) => alert(err.message));
+  });
+
+  actions.append(pinBtn, renameBtn, deleteBtn);
+  row.append(label, actions);
+  return row;
+}
+
 async function loadSessions() {
-  const data = await API.get("/api/user/sessions");
+  const data = await API.get(sessionsListUrl());
   const list = document.getElementById("sessionList");
   list.innerHTML = "";
-  (data.sessions || []).forEach((s) => {
-    const item = document.createElement("div");
-    item.className = `session-item${s.session_id === sessionId ? " active" : ""}`;
-    const label = s.project_type
-      ? s.project_type.replace(/_/g, " ")
-      : s.stage || "New project";
-    item.textContent = label;
-    item.title = new Date(s.updated_at).toLocaleString();
-    item.onclick = () => openSession(s.session_id, false);
-    list.appendChild(item);
-  });
+  const sessions = data.sessions || [];
+  if (!sessions.length) {
+    const empty = document.createElement("div");
+    empty.className = "session-empty";
+    empty.textContent = sessionSearchTerm.trim() ? "No chats match your search." : "No chats yet.";
+    list.appendChild(empty);
+    return;
+  }
+  sessions.forEach((s) => list.appendChild(renderSessionRow(s)));
 }
 
 async function uploadFile(file) {
@@ -211,9 +376,40 @@ async function uploadFile(file) {
   sendMessage(`I uploaded ${data.filename}. ${data.description_preview || ""}`);
 }
 
+async function initSessionForUser() {
+  const sessionsRes = await API.get("/api/user/sessions");
+  const userSessions = sessionsRes.sessions || [];
+  const sessionIds = new Set(userSessions.map((s) => s.session_id));
+
+  let storedId = localStorage.getItem(sessionStorageKey(currentUser.id));
+  const legacyId = localStorage.getItem("ati_session_id");
+  if (legacyId) {
+    if (sessionIds.has(legacyId)) {
+      storedId = legacyId;
+      persistSessionId(legacyId);
+    }
+    localStorage.removeItem("ati_session_id");
+  }
+
+  if (storedId && sessionIds.has(storedId)) {
+    await openSession(storedId, false);
+    return;
+  }
+
+  if (userSessions.length > 0) {
+    await openSession(userSessions[0].session_id, false);
+    return;
+  }
+
+  await newSession();
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   currentUser = await requireAuth();
   if (!currentUser) return;
+  if (typeof cacheAuthUser === "function") {
+    cacheAuthUser(currentUser);
+  }
 
   document.getElementById("userName").textContent = currentUser.full_name;
   if (currentUser.role === "admin") {
@@ -221,8 +417,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   document.getElementById("newChatBtn")?.addEventListener("click", newSession);
+  document.getElementById("sessionSearch")?.addEventListener("input", (e) => {
+    sessionSearchTerm = e.target.value;
+    clearTimeout(sessionSearchTimer);
+    sessionSearchTimer = setTimeout(() => loadSessions().catch(console.error), 200);
+  });
+  document.getElementById("generateBriefBtn")?.addEventListener("click", requestGenerateBrief);
   document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-    await API.post("/api/auth/logout", {});
+    if (typeof logoutUser === "function") {
+      await logoutUser();
+    } else {
+      clearStoredSessionId();
+      await API.post("/api/auth/logout", {});
+    }
     window.location.href = "/login.html";
   });
 
@@ -230,7 +437,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const input = document.getElementById("messageInput");
   sendBtn?.addEventListener("click", () => { sendMessage(input.value); input.value = ""; });
   input?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input.value); input.value = ""; }
+    if (e.key !== "Enter" || e.shiftKey) return;
+    const sendOnEnter = typeof getSetting === "function" ? getSetting("sendOnEnter") : true;
+    if (!sendOnEnter) return;
+    e.preventDefault();
+    sendMessage(input.value);
+    input.value = "";
   });
   input?.addEventListener("input", () => setSendEnabled(ws?.readyState === WebSocket.OPEN));
 
@@ -241,15 +453,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   updateEmptyState();
-
-  sessionId = localStorage.getItem("ati_session_id");
-  const sessions = await API.get("/api/user/sessions");
-  if (!sessionId && sessions.sessions?.length) {
-    sessionId = sessions.sessions[0].session_id;
-  }
-  if (!sessionId) {
-    await newSession();
-  } else {
-    await openSession(sessionId, false);
-  }
+  await initSessionForUser();
 });

@@ -7,6 +7,7 @@ from app.config import settings
 from app.models.brief import Brief
 from app.models.onboarding_session import OnboardingSessionDoc
 from app.models.user import User
+from app.models.user_memory import UserMemory
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ async def connect_mongodb() -> None:
     _client = AsyncMongoClient(settings.MONGODB_URI)
     await init_beanie(
         database=_client[settings.MONGODB_DB_NAME],
-        document_models=[User, OnboardingSessionDoc, Brief],
+        document_models=[User, OnboardingSessionDoc, Brief, UserMemory],
     )
     logger.info("Connected to MongoDB: %s", settings.MONGODB_DB_NAME)
 

@@ -3,29 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login — ATI Onboarding</title>
+  <title>Login — Client Onboarding Agent</title>
+  <script>(function(){try{var t=localStorage.getItem("ati_theme")||"system";if(["system","light","dark"].indexOf(t)<0)t="system";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","system");}})();</script>
   <link href="/static/css/app.css" rel="stylesheet">
+  <link href="/static/css/theme.css" rel="stylesheet">
+  <link href="/static/css/settings.css" rel="stylesheet">
+  <link href="/static/css/site.css" rel="stylesheet">
+  <style>
+    .auth-split { display:flex; flex:1; }
+    .auth-brand { flex:1; display:flex; flex-direction:column; justify-content:center; padding:48px; max-width:480px; }
+    .auth-brand h1 { font-size:32px; font-weight:400; margin:0 0 12px; }
+    .auth-brand p { color:var(--secondary); line-height:1.6; margin:0; }
+    .auth-form-col { flex:1; display:flex; align-items:center; justify-content:center; padding:24px; border-left:1px solid var(--border); }
+    @media (max-width:768px) {
+      .auth-split { flex-direction:column; }
+      .auth-form-col { border-left:none; border-top:1px solid var(--border); }
+      .auth-brand { max-width:none; padding:32px 24px 0; }
+    }
+  </style>
 </head>
-<body class="auth-page d-flex align-items-center justify-content-center">
-  <div class="auth-card w-100 mx-3">
-    <h4 class="text-center">ATI Onboarding Assistant</h4>
-    <p class="text-center small mb-4" style="color: var(--secondary);">Awesome Technologies Inc.</p>
-    <div id="authError" class="alert alert-danger d-none" style="font-size:14px;color:var(--error);"></div>
-    <form id="loginForm">
-      <div class="mb-3">
-        <label class="form-label">Email</label>
-        <input type="email" id="email" class="form-control" required>
+<body data-page="signin" data-nav-compact="true">
+  <div class="auth-split-with-nav">
+    <div id="siteNav"></div>
+    <div class="auth-split">
+      <div class="auth-brand">
+        <h1>Client Onboarding Agent</h1>
+        <p>Describe your project in conversation. We'll prepare a structured brief for Awesome Technologies Inc. advisors to review within 3 business days.</p>
       </div>
-      <div class="mb-3">
-        <label class="form-label">Password</label>
-        <input type="password" id="password" class="form-control" required>
+      <div class="auth-form-col">
+        <div class="auth-card w-100 mx-3 auth-form" style="border:none;max-width:380px;">
+          <h4 class="text-center" style="font-weight:400;">Sign in</h4>
+          <p class="text-center small mb-4" style="color:var(--secondary);">Awesome Technologies Inc.</p>
+          <div id="authError" class="d-none" style="font-size:14px;color:var(--error);margin-bottom:12px;"></div>
+          <form id="loginForm">
+            <div class="form-group">
+              <label class="form-label" for="email">Email</label>
+              <input type="email" id="email" class="form-control" required autocomplete="email">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="password">Password</label>
+              <div class="password-field">
+                <input type="password" id="password" class="form-control" required autocomplete="current-password">
+                <button type="button" class="password-toggle" data-target="password" aria-label="Show password">
+                  <svg class="eye-open" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg>
+                  <svg class="eye-closed d-none" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7.028 7.028 0 0 0-2.79.588l.77.771A6.001 6.001 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.134 13.134 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755-.165.165-.337.328-.517.486l.708.709z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829l.822.822zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829z"/><path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary-custom mb-2 w-100">Sign in</button>
+          </form>
+          <button id="googleLogin" class="btn-secondary-custom mb-3 w-100">Sign in with Google</button>
+          <p class="text-center small mb-0" style="color:var(--secondary);">No account? <a href="/register.html">Register</a> · <a href="/privacy.html">Privacy</a></p>
+        </div>
       </div>
-      <button type="submit" class="btn-primary-custom mb-2">Sign in</button>
-    </form>
-    <button id="googleLogin" class="btn-secondary-custom mb-3">Sign in with Google</button>
-    <p class="text-center small mb-0" style="color:var(--secondary);">No account? <a href="/register.html">Register</a></p>
+    </div>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/theme.js?v=3.4.0"></script>
+  <script src="/static/js/settings.js?v=3.4.0"></script>
+  <script src="/static/js/api.js?v=3.2.1"></script>
+  <script src="/static/js/site-nav.js?v=3.4.0"></script>
+  <script src="/static/js/auth.js?v=3.2.1"></script>
 </body>
 </html>

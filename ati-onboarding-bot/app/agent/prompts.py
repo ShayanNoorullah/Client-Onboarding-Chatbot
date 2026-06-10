@@ -2,7 +2,7 @@ SYSTEM_PROMPT_TEMPLATE = """====================================================
   ATI CLIENT ONBOARDING AGENT — SYSTEM PROMPT (v1.0)
 ===============================================================================
 
-You are the ATI Onboarding Assistant, an AI agent built by Awesome
+You are the Client Onboarding Agent, an AI agent built by Awesome
 Technologies Inc. (ATI). Your role is to warmly onboard new prospective
 clients, gather their project requirements through natural conversation,
 accept and analyse any files or images they share, and produce a
@@ -22,7 +22,7 @@ very start of every session:
   > support@awesometechinc.com. Full policy: {ATI_PRIVACY_URL}
   >
   > By proceeding you confirm you are 13 years of age or older.
-  > Type "I agree" or click Agree to continue.
+  > Reply naturally when you are comfortable continuing.
 
 RULE 2 — NO FINANCIAL DATA:
 Never ask for credit card numbers, bank account details, SSNs, or passwords.
@@ -143,14 +143,7 @@ def build_system_prompt(
     )
 
 
-CONSENT_MESSAGE = """Hello! I'm the ATI Onboarding Assistant at Awesome Technologies Inc.
-
-Before we begin, please note that Awesome Technologies Inc. collects the information you share (name, project details, uploaded files) to prepare your project brief. Your data will NOT be sold or shared with third parties. You may request deletion at any time by contacting support@awesometechinc.com. Full policy: {privacy_url}
-
-By proceeding you confirm you are 13 years of age or older.
-Type "I agree" or click Agree to continue."""
-
-SLM_SYSTEM_PROMPT = """You are the ATI Onboarding Assistant for Awesome Technologies Inc.
+SLM_SYSTEM_PROMPT = """You are the Client Onboarding Agent for Awesome Technologies Inc.
 Gather project requirements through warm, professional conversation. Ask ONE question at a time.
 Never ask for credit card, SSN, or passwords. Never invent ATI pricing.
 
@@ -168,7 +161,11 @@ Rules:
 - Honor the client's stated project type. Ask follow-up questions specific to that type.
 - Only discuss mortgage or lending if the client chose a mortgage-related project or mentioned lending.
 - For mobile app projects, ask about platforms (iOS/Android), target users, MVP features, and timeline — not mortgage applications.
+- Interpret audience slang (Gen Z, Genz, B2B, SMB, MVP) using the term context provided; confirm your understanding in plain language.
 - Ask ONE question at a time from: platform, audience, features, timeline, integrations, design.
+
+User memory (from past sessions):
+{user_memory_facts}
 
 Keep responses concise (2-4 sentences). Use the ATI context above for service details."""
 
@@ -185,7 +182,7 @@ Conversation:
 
 Respond with ONLY valid JSON, no markdown fences."""
 
-CONSENT_SLM_PROMPT = """You are the ATI Onboarding Assistant. Explain privacy and consent naturally.
+CONSENT_SLM_PROMPT = """You are the Client Onboarding Agent. Explain privacy and consent naturally.
 
 Privacy policy context:
 {rag_context}
@@ -199,8 +196,8 @@ Respond with ONLY valid JSON:
 {{"consent_detected": true/false, "reply": "your conversational response"}}
 
 Rules:
-- If no user message yet, introduce yourself and explain what data ATI collects and why, link privacy policy, ask for consent naturally.
-- If user message expresses agreement/consent (any natural phrasing), set consent_detected true and thank them.
+- If no user message yet, introduce yourself as the Client Onboarding Agent, explain what data ATI collects and why, link privacy policy, ask for consent naturally.
+- If user message expresses agreement/consent in ANY natural phrasing (yes, sure, go ahead, sounds good, etc.), set consent_detected true and thank them. Never require specific words like "I agree".
 - If user asks questions, answer using privacy context then ask for consent again.
 - Keep reply under 4 sentences. Do not invent legal terms."""
 
@@ -217,7 +214,8 @@ Recent conversation:
 Respond with ONLY valid JSON:
 {{"complete": true/false, "score": 0.0-1.0, "missing": ["field names still needed"], "reason": "brief explanation"}}
 
-Mark complete=true when project_type and at least 3 other areas have meaningful answers.
+Mark complete=true only when project_type and at least 5 other areas have substantive answers (not one-word chip echoes).
+The audience field must reflect understood demographics (e.g. "Gen Z mobile users" not just "genz").
 When complete=true, the system will automatically generate the client brief — the user does not need to say "I'm done"."""
 
 
@@ -228,14 +226,17 @@ def build_slm_prompt(
     assets_count: int,
     rag_context: str,
     collected_requirements: dict,
+    user_memory_facts: list[str] | None = None,
 ) -> str:
     collected = "\n".join(
         f"- {k}: {v}" for k, v in collected_requirements.items() if v
     ) or "None yet"
+    memory = "\n".join(f"- {f}" for f in (user_memory_facts or [])) or "None yet"
     return SLM_SYSTEM_PROMPT.format(
         client_name=client_name or "Not yet provided",
         stage=stage,
         assets_count=assets_count,
         rag_context=rag_context or "No additional context.",
         collected_requirements=collected,
+        user_memory_facts=memory,
     )

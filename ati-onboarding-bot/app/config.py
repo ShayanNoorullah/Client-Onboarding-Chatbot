@@ -38,9 +38,7 @@ class Settings:
     STORAGE_ROOT: Path = Path(os.getenv("STORAGE_ROOT", "./client_data"))
     ATI_KB_ROOT: Path = Path(os.getenv("ATI_KB_ROOT", "./ati_kb"))
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
-    ATI_PRIVACY_URL: str = os.getenv(
-        "ATI_PRIVACY_URL", "https://awesometechinc.com/privacy-policy/"
-    )
+    ATI_PRIVACY_URL: str = os.getenv("ATI_PRIVACY_URL", "/privacy.html")
     ATI_SUPPORT_EMAIL: str = os.getenv("ATI_SUPPORT_EMAIL", "support@awesometechinc.com")
     ATI_PHONE: str = os.getenv("ATI_PHONE", "877-284-4968")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -64,7 +62,12 @@ class Settings:
 
         return self.STORAGE_ROOT / sanitise_name(client_name)
 
-    def client_vectors_dir(self, client_name: str) -> Path:
+    def project_folder(self, client_name: str, workspace_slug: str) -> Path:
+        return self.client_folder(client_name) / workspace_slug
+
+    def client_vectors_dir(self, client_name: str, workspace_slug: str | None = None) -> Path:
+        if workspace_slug:
+            return self.project_folder(client_name, workspace_slug) / "vectors"
         return self.client_folder(client_name) / "vectors"
 
 

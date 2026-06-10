@@ -25,6 +25,14 @@ class OnboardingState(TypedDict):
     brief_id: str | None
     consent_prompt_sent: bool
     auto_summarising: bool
+    workspace_slug: str | None
+    requirements_turn_count: int
+    slm_readiness_complete: bool
+    consent_pending_slm: bool
+    user_memory_facts: list[str]
+    manual_brief_requested: bool
+    brief_update_pending: bool
+    brief_version: int
 
 
 def default_state() -> OnboardingState:
@@ -52,4 +60,12 @@ def default_state() -> OnboardingState:
         "brief_id": None,
         "consent_prompt_sent": False,
         "auto_summarising": False,
+        "workspace_slug": None,
+        "requirements_turn_count": 0,
+        "slm_readiness_complete": False,
+        "consent_pending_slm": False,
+        "user_memory_facts": [],
+        "manual_brief_requested": False,
+        "brief_update_pending": False,
+        "brief_version": 1,
     }

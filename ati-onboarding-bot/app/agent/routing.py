@@ -9,27 +9,20 @@ DONE_PHRASES = {
     "create the brief", "ready to go",
 }
 
-CONSENT_PHRASES = {
-    "i agree", "agree", "yes i agree", "i consent", "consent",
-    "yes", "sure", "ok", "okay", "sounds good", "yes i consent",
-    "yes, i consent", "i accept", "accept",
-}
-
 AUTO_BRIEF_READINESS_THRESHOLD = 0.85
-
-
-def is_consent_message(text: str) -> bool:
-    normalized = text.strip().lower()
-    if normalized in CONSENT_PHRASES:
-        return True
-    return normalized.startswith("i agree") or normalized.startswith("yes, i")
+MIN_REQUIREMENTS_TURNS = 5
+MIN_FIELD_VALUE_LEN = 15
 
 
 def is_ready_for_auto_brief(state: OnboardingState) -> bool:
     """Enough requirements collected — brief can be generated without user saying done."""
     if state.get("done"):
         return False
+    if state.get("requirements_turn_count", 0) < MIN_REQUIREMENTS_TURNS:
+        return False
     if not state.get("requirements_complete"):
+        return False
+    if not state.get("slm_readiness_complete"):
         return False
     return state.get("readiness_score", 0) >= AUTO_BRIEF_READINESS_THRESHOLD
 
@@ -39,6 +32,20 @@ def is_done_message(text: str) -> bool:
     return any(phrase in normalized for phrase in DONE_PHRASES)
 
 
+def should_summarise_manual(state: OnboardingState) -> bool:
+    """User clicked Generate Brief — bypass readiness gates when prerequisites met."""
+    return bool(state.get("manual_brief_requested"))
+
+
+def can_request_manual_brief(state: OnboardingState) -> bool:
+    return bool(
+        state.get("consent_given")
+        and state.get("client_name")
+        and not state.get("done")
+        and state.get("stage") in ("requirements", "clarify")
+    )
+
+
 def should_summarise(state: "OnboardingState", text: str) -> bool:
     """Explicit finish request or readiness met with brief intent."""
     normalized = text.strip().lower()
@@ -46,6 +53,8 @@ def should_summarise(state: "OnboardingState", text: str) -> bool:
         p in normalized
         for p in ("generate my brief", "create the brief", "prepare my brief", "finish", "i'm done", "im done")
     )
+    if should_summarise_manual(state):
+        return True
     if is_done_message(text):
         return True
     if state.get("requirements_complete") and brief_intent:

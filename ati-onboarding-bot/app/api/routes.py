@@ -5,8 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
-from app.agent.graph import process_message, run_agent_step
-from app.agent.nodes import greeting_node
+from app.agent.graph import process_message, request_manual_brief, run_agent_step
+from app.agent.routing import can_request_manual_brief
+from app.agent.nodes import generate_slm_consent_intro, greeting_node
 from app.agent.task_router import get_suggestions
 from app.auth.dependencies import get_current_user, get_ws_user
 from app.config import settings
@@ -14,8 +15,13 @@ from app.models.user import User
 from app.processors.file_router import is_supported, process_file
 from app.rag.embedder import embed_text
 from app.services.brief_service import persist_brief_to_mongo
+from app.services.learning_service import (
+    extract_and_store_facts,
+    get_user_memory_facts,
+    learn_from_completed_session,
+)
 from app.storage.file_manager import (
-    create_client_workspace,
+    get_project_folder_from_state,
     save_asset,
     sanitise_name,
 )
@@ -39,18 +45,65 @@ def _run_agent_step_sync(session_id: str, user_message: str | None = None) -> di
     return state
 
 
+async def _hydrate_memory(state: dict) -> None:
+    user_id = state.get("user_id")
+    if user_id:
+        state["user_memory_facts"] = await get_user_memory_facts(user_id)
+
+
 async def _run_agent_step(session_id: str, user_message: str | None = None) -> dict:
+    state = await mongo_session_store.get(session_id)
+    await _hydrate_memory(state)
+    mongo_session_store.update_sync(session_id, state)
+
     loop = asyncio.get_running_loop()
     state = await asyncio.wait_for(
         loop.run_in_executor(_agent_executor, _run_agent_step_sync, session_id, user_message),
         timeout=90.0,
     )
     await mongo_session_store.update(session_id, state)
-    if state.get("done") and not state.get("brief_id"):
+
+    if user_message and state.get("stage") in ("requirements", "clarify"):
+        last_reply = state.get("pending_reply", "")
+        asyncio.create_task(
+            extract_and_store_facts(state.get("user_id"), user_message, last_reply)
+        )
+
+    if state.get("done"):
+        had_brief = bool(state.get("brief_id"))
         brief_id = await persist_brief_to_mongo(state)
         if brief_id:
             state["brief_id"] = brief_id
             await mongo_session_store.update(session_id, state)
+        if not had_brief:
+            await learn_from_completed_session(state)
+    return state
+
+
+def _run_manual_brief_sync(session_id: str) -> dict:
+    state = mongo_session_store.get_sync(session_id)
+    state = request_manual_brief(state)
+    mongo_session_store.update_sync(session_id, state)
+    return state
+
+
+async def _run_manual_brief(session_id: str) -> dict:
+    pre_state = await mongo_session_store.get(session_id)
+    had_brief = bool(pre_state.get("brief_id"))
+    loop = asyncio.get_running_loop()
+    state = await asyncio.wait_for(
+        loop.run_in_executor(_agent_executor, _run_manual_brief_sync, session_id),
+        timeout=90.0,
+    )
+    await mongo_session_store.update(session_id, state)
+
+    if state.get("done"):
+        brief_id = await persist_brief_to_mongo(state)
+        if brief_id:
+            state["brief_id"] = brief_id
+            await mongo_session_store.update(session_id, state)
+        if not had_brief:
+            await learn_from_completed_session(state)
     return state
 
 
@@ -60,7 +113,7 @@ def _reply_content(state: dict) -> str:
     for msg in reversed(state.get("messages", [])):
         if msg.get("role") == "assistant" and msg.get("content"):
             return msg["content"]
-    return "Hello! I'm the ATI Onboarding Assistant. How can I help with your project today?"
+    return "Hello! I'm the Client Onboarding Agent. How can I help with your project today?"
 
 
 async def _send_assistant_reply(websocket: WebSocket, state: dict, *, include_history: bool = False) -> None:
@@ -92,6 +145,9 @@ async def _send_assistant_reply(websocket: WebSocket, state: dict, *, include_hi
         "consent_given": state.get("consent_given", False),
         "client_name": state.get("client_name"),
         "assets_count": len(state.get("assets", [])),
+        "brief_version": state.get("brief_version", 1),
+        "show_generate_brief": can_request_manual_brief(state),
+        "brief_updated": state.get("brief_update_pending", False),
     }
     if include_history:
         payload["messages"] = state.get("messages", [])
@@ -119,6 +175,20 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             await mongo_session_store.update(session_id, state)
             logger.info("Sent instant greeting to session %s", session_id)
             await _send_assistant_reply(websocket, state)
+            if state.get("consent_pending_slm"):
+                def _slm_consent_sync() -> dict:
+                    s = mongo_session_store.get_sync(session_id)
+                    s = generate_slm_consent_intro(s)
+                    mongo_session_store.update_sync(session_id, s)
+                    return s
+
+                loop = asyncio.get_running_loop()
+                state = await asyncio.wait_for(
+                    loop.run_in_executor(_agent_executor, _slm_consent_sync),
+                    timeout=90.0,
+                )
+                await mongo_session_store.update(session_id, state)
+                await _send_assistant_reply(websocket, state)
         else:
             logger.info("Syncing state to reconnected session %s", session_id)
             await _send_assistant_reply(websocket, state, include_history=True)
@@ -127,9 +197,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
         await websocket.send_json({
             "type": "message",
             "role": "assistant",
-            "content": "Hello! I'm the ATI Onboarding Assistant. Let's begin with your privacy consent.",
+            "content": "Hello! I'm the Client Onboarding Agent. Let's begin with your privacy consent.",
             "stage": "consent",
-            "suggestions": ["I agree", "Tell me more about privacy"],
+            "suggestions": ["Tell me more about privacy", "What data do you collect?", "I'm ready to continue"],
             "consent_given": False,
         })
 
@@ -138,11 +208,35 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             data = await websocket.receive_text()
             try:
                 payload = json.loads(data)
-                user_message = payload.get("message", data)
             except json.JSONDecodeError:
-                user_message = data
+                payload = {"message": data}
 
-            logger.info("Received message for session %s: %s", session_id, user_message[:50])
+            if payload.get("action") == "generate_brief":
+                logger.info("Manual brief requested for session %s", session_id)
+                try:
+                    state = await _run_manual_brief(session_id)
+                    await _send_assistant_reply(websocket, state)
+                except asyncio.TimeoutError:
+                    await websocket.send_json({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": "Sorry, brief generation took too long. Please try again.",
+                        "stage": "error",
+                        "suggestions": [],
+                    })
+                except Exception:
+                    logger.exception("Error generating manual brief for session %s", session_id)
+                    await websocket.send_json({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": "Sorry, something went wrong generating your brief. Please try again.",
+                        "stage": "error",
+                        "suggestions": [],
+                    })
+                continue
+
+            user_message = payload.get("message", data)
+            logger.info("Received message for session %s: %s", session_id, str(user_message)[:50])
 
             try:
                 state = await _run_agent_step(session_id, user_message)
@@ -198,7 +292,11 @@ async def upload_file(
     if total_size > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
         raise HTTPException(status_code=400, detail=f"Maximum {settings.MAX_UPLOAD_SIZE_MB} MB per session")
 
-    client_folder = create_client_workspace(state["client_name"])
+    from app.agent.nodes import _ensure_project_workspace
+
+    _ensure_project_workspace(state)
+    await mongo_session_store.update(session_id, state)
+    client_folder = get_project_folder_from_state(state)
     saved_path = save_asset(client_folder, file.filename or "upload", content)
 
     try:
@@ -213,7 +311,7 @@ async def upload_file(
     state["asset_descriptions"][str(saved_path)] = extracted[:500]
     embed_text(
         extracted,
-        f"client_{sanitise_name(state['client_name'])}",
+        f"project_{state.get('workspace_slug') or sanitise_name(state['client_name'])}",
         client_folder / "vectors",
         metadata={"source": str(saved_path), "type": proc_type},
     )

@@ -95,7 +95,7 @@ PROJECT_TYPE_SUGGESTIONS: dict[str, list[str]] = {
 }
 
 STAGE_SUGGESTIONS: dict[str, list[str]] = {
-    "consent": ["I agree"],
+    "consent": ["Tell me more about privacy", "What data do you collect?", "I'm ready to continue"],
     "identity": [],
     "requirements": INITIAL_PROJECT_SUGGESTIONS,
     "clarify": [
@@ -150,7 +150,7 @@ def get_suggestions(
     missing_fields: list[str] | None = None,
 ) -> list[str]:
     if stage == "consent":
-        return ["I agree", "Yes, I consent", "Tell me more about privacy"]
+        return ["Tell me more about privacy", "What data do you collect?", "I'm ready to continue"]
     if stage == "identity":
         return []
 

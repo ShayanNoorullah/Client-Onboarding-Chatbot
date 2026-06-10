@@ -1,0 +1,191 @@
+/* Admin shell — ChatGPT Minimal tokens */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--surface, #fff);
+}
+
+.admin-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border, #E5E7EB);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fff);
+}
+
+.admin-sidebar-brand {
+  padding: 20px 16px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-surface, #0D0D0D);
+}
+
+.admin-sidebar-sub {
+  padding: 0 16px 16px;
+  font-size: 12px;
+  color: var(--secondary, #6B7280);
+}
+
+.admin-nav {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.admin-nav a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-surface, #0D0D0D);
+  text-decoration: none;
+  margin-bottom: 2px;
+}
+
+.admin-nav a:hover { background: var(--muted, #F3F4F6); }
+.admin-nav a.active { background: var(--muted, #F3F4F6); }
+
+.admin-nav a.external::after {
+  content: " ↗";
+  font-size: 11px;
+  color: var(--secondary, #6B7280);
+}
+
+.admin-sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--border, #E5E7EB);
+}
+
+.admin-sidebar-footer button,
+.admin-sidebar-footer a.footer-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--on-surface, #0D0D0D);
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.admin-sidebar-footer button:hover,
+.admin-sidebar-footer a.footer-link:hover {
+  background: var(--muted, #F3F4F6);
+}
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+.admin-main h1 {
+  font-size: 24px;
+  font-weight: 400;
+  margin: 0 0 24px;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.admin-stat-card {
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface, #fff);
+}
+
+.admin-stat-card .label {
+  font-size: 12px;
+  color: var(--secondary, #6B7280);
+  margin-bottom: 4px;
+}
+
+.admin-stat-card .value {
+  font-size: 28px;
+  font-weight: 400;
+  margin: 0;
+}
+
+.admin-card {
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface, #fff);
+  margin-bottom: 16px;
+}
+
+.admin-card h6 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border, #E5E7EB);
+}
+
+.admin-table th {
+  font-weight: 500;
+  color: var(--secondary, #6B7280);
+  font-size: 12px;
+}
+
+.admin-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .admin-layout { flex-direction: column; }
+  .admin-sidebar { width: 100%; max-height: 40vh; }
+  .admin-grid-2 { grid-template-columns: 1fr; }
+}
+
+.badge-admin {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  background: var(--muted, #F3F4F6);
+}
+
+.badge-admin.role-admin { background: var(--badge-admin-bg, #FEE2E2); color: var(--badge-admin-color, #991B1B); }
+
+.btn-admin-sm {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--on-surface, #0D0D0D);
+  margin-right: 4px;
+}
+
+.btn-admin-sm.danger { color: var(--error, #D92D20); border-color: var(--badge-danger-border, #FECACA); }
+
+.health-ok { color: var(--health-ok, #059669); }
+.health-degraded { color: #D97706; }
+.health-error { color: var(--error, #D92D20); }
