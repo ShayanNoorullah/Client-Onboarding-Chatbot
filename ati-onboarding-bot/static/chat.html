@@ -59,6 +59,7 @@
         <button type="button" id="sidebarToggle" class="sidebar-toggle" aria-label="Open menu">
           <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/></svg>
         </button>
+        <div id="chatProgressPanel" class="chat-progress-panel d-none"><div class="chat-progress-bar"><div id="chatProgressFill" class="chat-progress-fill"></div></div><span id="chatProgressLabel" class="chat-progress-label"></span></div>
         <div class="chat-topbar-info">
           <div class="chat-topbar-title">Client Onboarding Agent</div>
           <div class="chat-status" id="status">Connecting...</div>
@@ -106,6 +107,7 @@
           </button>
         </div>
       </div>
+      <div id="briefFeedback" class="brief-feedback d-none"><p>How was your brief?</p><div class="brief-feedback-actions"><button type="button" data-rating="5">Great</button><button type="button" data-rating="3">OK</button><button type="button" data-rating="1">Poor</button></div></div>
     </main>
   </div>
   <script src="/static/js/theme.js?v=3.6.0"></script>

@@ -10,9 +10,16 @@ from app.models.brief import Brief
 from app.models.onboarding_session import OnboardingSessionDoc
 from app.models.user import User
 from app.storage.file_manager import delete_client_data
+from app.services.agent_metrics import metrics
 from app.storage.mongo_session_store import mongo_session_store
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _avg_turns_to_brief(done_sessions: int, total_sessions: int) -> float:
+    if not done_sessions:
+        return 0.0
+    return round(total_sessions / done_sessions, 1)
 
 
 @router.get("/dashboard")
@@ -96,6 +103,9 @@ async def dashboard(_: User = Depends(require_admin)):
         "project_types": project_types,
         "recent_sessions": [s.to_summary() for s in recent],
         "ollama": check_ollama_health(),
+        "agent_metrics": metrics.summary(),
+        "avg_turns_to_brief": _avg_turns_to_brief(done_sessions, total_sessions),
+        "drop_off_by_stage": sessions_by_stage,
     }
 
 

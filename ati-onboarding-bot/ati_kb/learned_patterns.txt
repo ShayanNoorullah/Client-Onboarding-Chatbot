@@ -2,3 +2,4 @@
 # Appended automatically after each brief is generated.
 [2026-06-10] project_type=website_development; audience=The primary audience would be the GenZ and the blogs will be related to the ongo; services=Responsive design development, Content management system integration, SEO optimization and performance tuning
 [2026-06-10] project_type=website_development; audience=It will be used primarily by customers who need loan upto 50k; services=Responsive design development, Content management system (CMS) integration, Lead generation form creation
+[2026-06-10] project_type=software_integration; audience=Shopify users and Microsoft Dynamics 365 ERP system users; services=Software Integration and API Development, Custom Software Development

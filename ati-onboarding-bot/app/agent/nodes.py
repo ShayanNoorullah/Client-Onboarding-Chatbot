@@ -21,6 +21,10 @@ from app.agent.task_router import (
     normalize_project_type,
 )
 from app.agent.term_glossary import expand_terms
+from app.agent.field_extractor import merge_collected_requirements
+from app.agent.session_memory import maybe_update_session_summary
+from app.agent.reflect_helpers import reflect_on_brief
+from app.services.agent_metrics import timed
 from app.config import settings
 from app.llm.factory import get_chat_llm
 from app.rag.retriever import query_combined_rag
@@ -39,6 +43,18 @@ def _append_message(state: OnboardingState, role: str, content: str) -> None:
     state["messages"].append({"role": role, "content": content})
 
 
+def _format_project_history(state: OnboardingState) -> str:
+    history = state.get("project_history") or []
+    if not history:
+        return ""
+    lines = []
+    for entry in history:
+        pt = entry.get("project_type", "project")
+        summary = str(entry.get("summary", ""))[:120]
+        lines.append(f"- {pt}: {summary}")
+    return "\n".join(lines)
+
+
 def _get_rag_context(state: OnboardingState, query: str = "") -> str:
     if not query:
         for msg in reversed(state.get("messages", [])):
@@ -51,11 +67,15 @@ def _get_rag_context(state: OnboardingState, query: str = "") -> str:
     project_type = state.get("collected_requirements", {}).get("project_type")
     rag_query = build_rag_query(query, project_type)
     try:
-        return query_combined_rag(
-            rag_query,
-            state.get("client_name"),
-            state.get("workspace_slug"),
-        )
+        sid = state.get("session_id", "")
+        stage = state.get("stage", "")
+        with timed("rag", sid, stage):
+            return query_combined_rag(
+                rag_query,
+                state.get("client_name"),
+                state.get("workspace_slug"),
+                user_id=state.get("user_id"),
+            )
     except Exception:
         logger.exception("RAG query failed")
         return ""
@@ -88,10 +108,12 @@ def _invoke_llm(state: OnboardingState, user_input: str | None = None) -> str:
         rag_context=rag_context,
         collected_requirements=state.get("collected_requirements", {}),
         user_memory_facts=state.get("user_memory_facts"),
+        project_history_text=_format_project_history(state),
+        session_summary=state.get("session_summary", ""),
     )
 
     lc_messages = [SystemMessage(content=system)]
-    for msg in state.get("messages", [])[-8:]:
+    for msg in state.get("messages", [])[-6:]:
         if msg["role"] == "user":
             lc_messages.append(HumanMessage(content=msg["content"]))
         elif msg["role"] == "assistant":
@@ -106,8 +128,10 @@ def _invoke_llm(state: OnboardingState, user_input: str | None = None) -> str:
         content = response.content
         if isinstance(content, list):
             content = " ".join(str(c) for c in content)
+        state["used_fallback"] = False
         return str(content)
     except Exception as e:
+        state["used_fallback"] = True
         logger.exception("Ollama LLM call failed")
         asked = state.get("requirements_asked", 0)
         fallback = get_next_fallback_question(asked)
@@ -122,6 +146,36 @@ def _invoke_llm(state: OnboardingState, user_input: str | None = None) -> str:
             f"Contact ATI at {settings.ATI_SUPPORT_EMAIL} if you need help."
         )
 
+
+
+
+def build_llm_messages(state: OnboardingState, user_input: str | None = None) -> list:
+    rag_context = _get_rag_context(state, user_input or "")
+    system = build_slm_prompt(
+        client_name=state.get("client_name") or "Not yet provided",
+        stage=state.get("stage", "requirements"),
+        assets_count=len(state.get("assets", [])),
+        rag_context=rag_context,
+        collected_requirements=state.get("collected_requirements", {}),
+        user_memory_facts=state.get("user_memory_facts"),
+        project_history_text=_format_project_history(state),
+        session_summary=state.get("session_summary", ""),
+    )
+    lc_messages = [SystemMessage(content=system)]
+    for msg in state.get("messages", [])[-6:]:
+        if msg["role"] == "user":
+            lc_messages.append(HumanMessage(content=msg["content"]))
+        elif msg["role"] == "assistant":
+            lc_messages.append(AIMessage(content=msg["content"]))
+    if user_input:
+        lc_messages.append(HumanMessage(content=user_input))
+    return lc_messages
+
+
+def stream_llm_reply(state: OnboardingState, user_input: str):
+    from app.llm.factory import stream_chat_llm
+    for chunk in stream_chat_llm(build_llm_messages(state, user_input), temperature=0.3):
+        yield chunk
 
 def _parse_json_response(text: str) -> dict:
     text = str(text).strip()
@@ -196,6 +250,12 @@ def _evaluate_readiness(state: OnboardingState) -> None:
         collected=json.dumps(collected, indent=2),
         conversation=conversation[:2000],
     )
+    if len(rule_missing) > 2 and not rule_complete:
+        state["slm_readiness_complete"] = False
+        state["requirements_complete"] = False
+        state["readiness_score"] = rule_score
+        state["missing_fields"] = rule_missing
+        return
     try:
         llm = get_chat_llm(temperature=0.1)
         response = llm.invoke([HumanMessage(content=prompt)])
@@ -366,7 +426,8 @@ def requirements_node(state: OnboardingState) -> OnboardingState:
         _append_message(state, "assistant", reply)
         return state
 
-    _update_collected_requirements(state, last_user)
+    merge_collected_requirements(state, last_user)
+    maybe_update_session_summary(state)
     state["requirements_turn_count"] = state.get("requirements_turn_count", 0) + 1
     reply = _invoke_llm(state, expand_terms(last_user))
     _evaluate_readiness(state)
@@ -385,6 +446,9 @@ def clarify_node(state: OnboardingState) -> OnboardingState:
     if file_ctx:
         prompt = f"{prompt}\n\n[Uploaded file context]: {file_ctx}"
 
+    if last_user:
+        merge_collected_requirements(state, last_user)
+        maybe_update_session_summary(state)
     state["requirements_turn_count"] = state.get("requirements_turn_count", 0) + 1
     reply = _invoke_llm(state, expand_terms(prompt))
     _evaluate_readiness(state)
@@ -463,6 +527,8 @@ def summarise_node(state: OnboardingState) -> OnboardingState:
         except Exception:
             logger.exception("Failed to write encrypted conversation log")
 
+    reflection = reflect_on_brief(state)
+    state["reflection"] = reflection
     state["summary_written"] = True
     state["done"] = True
     state["manual_brief_requested"] = False
@@ -484,6 +550,23 @@ def summarise_node(state: OnboardingState) -> OnboardingState:
         )
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
+    return state
+
+
+
+
+def proactive_clarify_after_upload(state: OnboardingState) -> OnboardingState:
+    """Generate assistant reply after file upload without user message."""
+    state["stage"] = "clarify"
+    state["requirements_turn_count"] = state.get("requirements_turn_count", 0) + 1
+    file_ctx = state.get("file_context", "")
+    prompt = f"I just uploaded a project file. Please review it and tell me what you found.\n\n[Uploaded file context]: {file_ctx}"
+    state["messages"].append({"role": "user", "content": "I uploaded a file for review."})
+    reply = _invoke_llm(state, expand_terms(prompt))
+    _evaluate_readiness(state)
+    state["pending_reply"] = reply
+    _append_message(state, "assistant", reply)
+    state["file_context"] = ""
     return state
 
 

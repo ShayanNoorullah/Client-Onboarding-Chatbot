@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.responses import Response
 
 from app.auth.dependencies import get_current_user, require_admin
 from app.models.brief import Brief
+from app.models.brief_feedback import BriefFeedback
 from app.models.user import User
 from app.services.brief_export import markdown_to_pdf_bytes, markdown_to_plain_text
 
@@ -66,6 +68,32 @@ async def download_brief(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
+
+
+
+class BriefFeedbackRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str = ""
+
+
+@router.post("/{brief_id}/feedback")
+async def submit_brief_feedback(brief_id: str, body: BriefFeedbackRequest, user: User = Depends(get_current_user)):
+    brief = await _get_brief_for_user(brief_id, user)
+    existing = await BriefFeedback.find_one(BriefFeedback.brief_id == brief_id, BriefFeedback.user_id == str(user.id))
+    if existing:
+        existing.rating = body.rating
+        existing.comment = body.comment
+        await existing.save()
+        return {"feedback": existing.to_public()}
+    fb = BriefFeedback(
+        user_id=str(user.id),
+        brief_id=brief_id,
+        session_id=brief.session_id,
+        rating=body.rating,
+        comment=body.comment,
+    )
+    await fb.insert()
+    return {"feedback": fb.to_public()}
 
 @router.delete("/{brief_id}")
 async def delete_brief(brief_id: str, user: User = Depends(get_current_user)):

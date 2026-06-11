@@ -16,7 +16,8 @@ from app.config import settings
 from app.db.mongodb import close_mongodb, connect_mongodb, seed_admin_user
 from app.llm.factory import check_ollama_health
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+_log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+logging.basicConfig(level=_log_level, format="%(levelname)s %(name)s: %(message)s")
 
 
 @asynccontextmanager

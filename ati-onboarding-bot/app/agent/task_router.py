@@ -24,6 +24,11 @@ REQUIREMENT_FIELDS = [
     "design_preferences",
 ]
 
+STRUCTURED_CHIPS: dict[str, dict] = {
+    "timeline": {"field": "timeline", "value": "8 weeks"},
+    "budget": {"field": "budget", "value": "$10k-$25k"},
+}
+
 MISSING_FIELD_CHIPS: dict[str, str] = {
     "project_type": "Website",
     "audience": "Small business owners",
@@ -162,6 +167,8 @@ def get_suggestions(
             for field in missing_fields[:3]:
                 if field in MISSING_FIELD_CHIPS:
                     chips.append(MISSING_FIELD_CHIPS[field])
+            if field in STRUCTURED_CHIPS:
+                chips.append(STRUCTURED_CHIPS[field]["value"])
             if chips:
                 return chips
         if project_type and project_type in PROJECT_TYPE_SUGGESTIONS:

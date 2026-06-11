@@ -901,3 +901,60 @@ html[data-chat-density="compact"] .typing-row {
     font-size: 13px;
   }
 }
+
+
+.chat-progress-panel {
+  padding: 6px 16px 0;
+  max-width: var(--chat-content-max-width);
+  margin: 0 auto;
+  width: 100%;
+}
+.chat-progress-bar {
+  height: 6px;
+  background: var(--muted);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.chat-progress-fill {
+  height: 100%;
+  background: var(--chat-accent, var(--primary));
+  width: 0%;
+  transition: width 0.3s ease;
+}
+.chat-progress-label {
+  font-size: 11px;
+  color: var(--secondary);
+  display: block;
+  margin-top: 4px;
+}
+.brief-feedback {
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 13px;
+}
+.brief-feedback-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.brief-feedback-actions button {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  cursor: pointer;
+}
+.streaming-bubble::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--secondary);
+  margin-left: 2px;
+  animation: typing-cursor 0.8s step-end infinite;
+}
+@keyframes typing-cursor {
+  50% { opacity: 0; }
+}

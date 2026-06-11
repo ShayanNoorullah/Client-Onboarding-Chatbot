@@ -1,3 +1,5 @@
+let streamingBubble = null;
+let streamedContent = "";
 let currentUser = null;
 let sessionId = null;
 let ws = null;
@@ -103,7 +105,14 @@ function renderChips(suggestions) {
     const chip = document.createElement("button");
     chip.className = "chip";
     chip.textContent = text;
-    chip.onclick = () => sendMessage(text);
+    const fieldMap = { "8 weeks": "timeline", "$10k-$25k": "budget", "Website": "project_type", "Mobile App": "project_type" };
+    chip.onclick = () => {
+      const field = fieldMap[text];
+      if (field && ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: "fill_field", field, value: text }));
+        appendMessage("user", text);
+      } else sendMessage(text);
+    };
     area.appendChild(chip);
   });
 }
@@ -273,6 +282,41 @@ function submitConsent() {
   ws.send(JSON.stringify({ action: "consent", agreement: value.trim() }));
 }
 
+
+function updateProgressPanel(data) {
+  const panel = document.getElementById("chatProgressPanel");
+  const fill = document.getElementById("chatProgressFill");
+  const label = document.getElementById("chatProgressLabel");
+  if (!panel || !fill || !label) return;
+  const score = Math.round((data.readiness_score || 0) * 100);
+  const missing = (data.missing_fields || []).slice(0, 3).join(", ");
+  if (data.consent_given && !data.done && data.stage !== "consent") {
+    panel.classList.remove("d-none");
+    fill.style.width = score + "%";
+    label.textContent = missing ? `Progress ${score}% — still need: ${missing}` : `Progress ${score}%`;
+  } else {
+    panel.classList.add("d-none");
+  }
+}
+
+function showBriefRecap(data) {
+  if (!data.show_brief_recap || !data.collected_requirements) return;
+  const items = Object.entries(data.collected_requirements).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+  if (!items.length) return;
+  appendMessage("assistant", "Here is what I have captured so far:\n" + items.map((i) => "- " + i).join("\n") + "\n\nDoes this look right? Add details or generate your brief when ready.");
+}
+
+async function submitBriefFeedback(rating) {
+  const briefId = window._lastBriefId;
+  if (!briefId) return;
+  try {
+    await API.post(`/api/briefs/${briefId}/feedback`, { rating, comment: "" });
+    document.getElementById("briefFeedback")?.classList.add("d-none");
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function updateStatus(data) {
   const status = document.getElementById("status");
   if (!status) return;
@@ -298,6 +342,10 @@ function handleServerMessage(data) {
 
   if (data.messages?.length) {
     renderHistory(data.messages);
+  } else if (data.streamed && streamedContent) {
+    if (streamingBubble) streamingBubble.innerHTML = linkify(streamedContent);
+    streamingBubble = null;
+    streamedContent = "";
   } else if (data.content?.trim()) {
     const container = document.getElementById("messages");
     const rows = container?.querySelectorAll(".msg-row.assistant");
@@ -353,6 +401,26 @@ function connectWS() {
   ws.onmessage = (ev) => {
     try {
       const data = JSON.parse(ev.data);
+      if (data.type === "stream_start") {
+        streamedContent = "";
+        streamingBubble = null;
+        return;
+      }
+      if (data.type === "token") {
+        streamedContent += data.content || "";
+        if (!streamingBubble) {
+          const container = document.getElementById("messages");
+          const row = document.createElement("div");
+          row.className = "msg-row assistant";
+          row.innerHTML = '<div class="msg-bubble streaming-bubble"></div>';
+          container.appendChild(row);
+          streamingBubble = row.querySelector(".msg-bubble");
+          updateEmptyState();
+        }
+        if (streamingBubble) streamingBubble.textContent = streamedContent;
+        scrollMessagesToBottom();
+        return;
+      }
       if (data.type === "consent_error") {
         waiting = false;
         showConsentError(data.message);
@@ -553,6 +621,7 @@ async function uploadFile(file) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || "Upload failed");
   appendMessage("system", `Uploaded: ${data.filename}`);
+  if (data.agent_message) appendMessage("assistant", data.agent_message);
   sendMessage(`I uploaded ${data.filename}. ${data.description_preview || ""}`);
 }
 
@@ -695,4 +764,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadConsentContent();
   updateEmptyState();
   await initSessionForUser();
+});
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll('[data-rating]').forEach((btn) => {
+    btn.addEventListener('click', () => submitBriefFeedback(Number(btn.dataset.rating)));
+  });
 });

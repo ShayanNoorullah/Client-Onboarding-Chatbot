@@ -46,6 +46,11 @@ class Settings:
     MAX_UPLOAD_SIZE_MB: int = 50
     MAX_FILES_PER_SESSION: int = 20
     RAG_CONTEXT_MAX_CHARS: int = 1500
+    RAG_KB_CHARS: int = int(os.getenv("RAG_KB_CHARS", "600"))
+    RAG_CLIENT_CHARS: int = int(os.getenv("RAG_CLIENT_CHARS", "600"))
+    RAG_MEMORY_CHARS: int = int(os.getenv("RAG_MEMORY_CHARS", "300"))
+    RAG_LEARNED_CHARS: int = int(os.getenv("RAG_LEARNED_CHARS", "300"))
+    PROMPT_VERSION: str = os.getenv("PROMPT_VERSION", "v2.0")
     COOKIE_NAME: str = "access_token"
 
     SUPPORTED_EXTENSIONS: set[str] = {

@@ -5,6 +5,7 @@ from pymongo import AsyncMongoClient
 
 from app.config import settings
 from app.models.brief import Brief
+from app.models.brief_feedback import BriefFeedback
 from app.models.onboarding_session import OnboardingSessionDoc
 from app.models.user import User
 from app.models.user_memory import UserMemory
@@ -20,7 +21,7 @@ async def connect_mongodb() -> None:
     _client = AsyncMongoClient(settings.MONGODB_URI)
     await init_beanie(
         database=_client[settings.MONGODB_DB_NAME],
-        document_models=[User, OnboardingSessionDoc, Brief, UserMemory],
+        document_models=[User, OnboardingSessionDoc, Brief, BriefFeedback, UserMemory],
     )
     logger.info("Connected to MongoDB: %s", settings.MONGODB_DB_NAME)
 

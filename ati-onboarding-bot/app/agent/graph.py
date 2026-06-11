@@ -64,6 +64,16 @@ def _maybe_auto_summarise(state: OnboardingState) -> OnboardingState:
 
     if not is_ready_for_auto_brief(state):
         return state
+    if not state.get("brief_recap_shown"):
+        collected = state.get("collected_requirements", {})
+        recap_lines = [f"- {k}: {v}" for k, v in collected.items() if v]
+        recap = "Here is what I have captured so far:\n" + "\n".join(recap_lines[:8])
+        recap += "\n\nDoes this look right? You can add more details or say \"generate brief\" when ready."
+        state["brief_recap_shown"] = True
+        state["awaiting_brief_confirm"] = True
+        state["pending_reply"] = recap
+        _append_transition(state, recap)
+        return state
     transition = "I have enough information — preparing your project brief now..."
     state["auto_summarising"] = True
     state["pending_reply"] = transition

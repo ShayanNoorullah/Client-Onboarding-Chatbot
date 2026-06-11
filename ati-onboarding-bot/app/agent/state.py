@@ -30,6 +30,14 @@ class OnboardingState(TypedDict):
     slm_readiness_complete: bool
     consent_pending_slm: bool
     user_memory_facts: list[str]
+    project_history: list[dict]
+    prior_briefs: list[dict]
+    session_summary: str
+    prompt_version: str
+    used_fallback: bool
+    awaiting_brief_confirm: bool
+    brief_recap_shown: bool
+    escalation_requested: bool
     manual_brief_requested: bool
     brief_update_pending: bool
     brief_version: int
@@ -65,6 +73,14 @@ def default_state() -> OnboardingState:
         "slm_readiness_complete": False,
         "consent_pending_slm": False,
         "user_memory_facts": [],
+        "project_history": [],
+        "prior_briefs": [],
+        "session_summary": "",
+        "prompt_version": "v2.0",
+        "used_fallback": False,
+        "awaiting_brief_confirm": False,
+        "brief_recap_shown": False,
+        "escalation_requested": False,
         "manual_brief_requested": False,
         "brief_update_pending": False,
         "brief_version": 1,

@@ -78,3 +78,14 @@ def check_ollama_health() -> dict:
         logger.warning("Ollama health check failed: %s", e)
         result["missing"] = result["required"]
     return result
+
+
+def stream_chat_llm(messages, *, temperature: float | None = None):
+    """Yield text chunks from Ollama streaming chat."""
+    llm = get_chat_llm(temperature=temperature)
+    for chunk in llm.stream(messages):
+        content = chunk.content
+        if isinstance(content, list):
+            content = "".join(str(c) for c in content)
+        if content:
+            yield str(content)

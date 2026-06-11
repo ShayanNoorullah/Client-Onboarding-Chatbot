@@ -32,6 +32,16 @@ async function loadDashboard() {
     });
   }
 
+  const metrics = data.agent_metrics || {};
+  const metricsEl = document.getElementById("agentMetricsTable");
+  if (metricsEl) {
+    metricsEl.innerHTML = `
+      <tr><td>Turn latency p50</td><td>${metrics.turn_latency_p50_ms || 0} ms</td></tr>
+      <tr><td>Turn latency p95</td><td>${metrics.turn_latency_p95_ms || 0} ms</td></tr>
+      <tr><td>Fallback rate</td><td>${metrics.fallback_rate_pct || 0}%</td></tr>
+      <tr><td>Avg turns/brief</td><td>${data.avg_turns_to_brief || 0}</td></tr>`;
+  }
+
   const activityBody = document.getElementById("activityTable");
   if (activityBody) {
     activityBody.innerHTML = "";

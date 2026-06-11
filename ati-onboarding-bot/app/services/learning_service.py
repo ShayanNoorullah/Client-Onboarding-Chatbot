@@ -28,6 +28,26 @@ async def get_user_memory_facts(user_id: str | None) -> list[str]:
     return list(mem.facts)[-10:] if mem else []
 
 
+async def get_user_memory_context(user_id: str | None) -> dict:
+    """Facts, project history, and formatted strings for prompts."""
+    if not user_id:
+        return {"facts": [], "project_history": [], "history_text": ""}
+    mem = await UserMemory.find_one(UserMemory.user_id == user_id)
+    if not mem:
+        return {"facts": [], "project_history": [], "history_text": ""}
+    history = list(mem.project_history)[-5:]
+    lines = []
+    for entry in history:
+        pt = entry.get("project_type", "project")
+        summary = entry.get("summary", "")[:120]
+        lines.append(f"- {pt}: {summary}")
+    return {
+        "facts": list(mem.facts)[-10:],
+        "project_history": history,
+        "history_text": "\n".join(lines) if lines else "",
+    }
+
+
 async def extract_and_store_facts(
     user_id: str | None,
     user_message: str,
@@ -127,6 +147,9 @@ async def learn_from_completed_session(state: dict) -> None:
         )
 
     _append_global_pattern(collected, requirements)
+    from app.services.kb_reindex import reindex_learned_patterns
+
+    reindex_learned_patterns()
 
 
 def _append_global_pattern(collected: dict, requirements: dict) -> None:

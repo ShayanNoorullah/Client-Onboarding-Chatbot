@@ -1,4 +1,5 @@
 import asyncio
+import time
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -6,18 +7,24 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
 from app.agent.graph import process_message, request_manual_brief, run_agent_step
+from app.agent.field_extractor import merge_collected_requirements
+from app.agent.session_memory import maybe_update_session_summary
+from app.agent.term_glossary import expand_terms
 from app.agent.routing import can_request_manual_brief
-from app.agent.nodes import greeting_node, is_modal_consent_phrase, record_modal_consent
+from app.agent.nodes import greeting_node, is_modal_consent_phrase, proactive_clarify_after_upload, record_modal_consent
 from app.agent.task_router import get_suggestions
 from app.auth.dependencies import get_current_user, get_ws_user
 from app.config import settings
 from app.models.user import User
+from app.models.brief import Brief
+from app.services.agent_metrics import metrics, timed
 from app.processors.file_router import is_supported, process_file
 from app.rag.embedder import embed_text
 from app.services.brief_service import persist_brief_to_mongo
 from app.services.learning_service import (
     extract_and_store_facts,
     get_user_memory_facts,
+    get_user_memory_context,
     learn_from_completed_session,
 )
 from app.storage.file_manager import (
@@ -48,10 +55,18 @@ def _run_agent_step_sync(session_id: str, user_message: str | None = None) -> di
 async def _hydrate_memory(state: dict) -> None:
     user_id = state.get("user_id")
     if user_id:
-        state["user_memory_facts"] = await get_user_memory_facts(user_id)
+        ctx = await get_user_memory_context(user_id)
+        state["user_memory_facts"] = ctx.get("facts", [])
+        state["project_history"] = ctx.get("project_history", [])
+        briefs = await Brief.find(Brief.user_id == user_id).sort(-Brief.created_at).limit(3).to_list()
+        state["prior_briefs"] = [
+            {"ref_id": b.ref_id, "client_name": b.client_name, "created_at": b.created_at.isoformat()}
+            for b in briefs
+        ]
 
 
 async def _run_agent_step(session_id: str, user_message: str | None = None) -> dict:
+    turn_start = time.perf_counter()
     state = await mongo_session_store.get(session_id)
     await _hydrate_memory(state)
     mongo_session_store.update_sync(session_id, state)
@@ -64,11 +79,15 @@ async def _run_agent_step(session_id: str, user_message: str | None = None) -> d
     await mongo_session_store.update(session_id, state)
 
     if user_message and state.get("stage") in ("requirements", "clarify"):
-        last_reply = state.get("pending_reply", "")
-        asyncio.create_task(
-            extract_and_store_facts(state.get("user_id"), user_message, last_reply)
-        )
+        turn_count = state.get("requirements_turn_count", 0)
+        if turn_count % 3 == 0:
+            last_reply = state.get("pending_reply", "")
+            asyncio.create_task(
+                extract_and_store_facts(state.get("user_id"), user_message, last_reply)
+            )
 
+    elapsed = (time.perf_counter() - turn_start) * 1000
+    metrics.record_turn(state.get("stage", "?"), elapsed, used_fallback=state.get("used_fallback", False))
     if state.get("done"):
         had_brief = bool(state.get("brief_id"))
         brief_id = await persist_brief_to_mongo(state)
@@ -77,6 +96,7 @@ async def _run_agent_step(session_id: str, user_message: str | None = None) -> d
             await mongo_session_store.update(session_id, state)
         if not had_brief:
             await learn_from_completed_session(state)
+            metrics.record_completion()
     return state
 
 
@@ -104,6 +124,7 @@ async def _run_manual_brief(session_id: str) -> dict:
             await mongo_session_store.update(session_id, state)
         if not had_brief:
             await learn_from_completed_session(state)
+            metrics.record_completion()
     return state
 
 
@@ -116,7 +137,7 @@ def _reply_content(state: dict) -> str:
     return "Hello! I'm the Client Onboarding Agent. How can I help with your project today?"
 
 
-async def _send_assistant_reply(websocket: WebSocket, state: dict, *, include_history: bool = False) -> None:
+async def _send_assistant_reply(websocket: WebSocket, state: dict, *, include_history: bool = False, streamed: bool = False) -> None:
     content = _reply_content(state)
     stage = state.get("stage", "consent")
     brief_url = None
@@ -148,7 +169,11 @@ async def _send_assistant_reply(websocket: WebSocket, state: dict, *, include_hi
         "assets_count": len(state.get("assets", [])),
         "brief_version": state.get("brief_version", 1),
         "show_generate_brief": can_request_manual_brief(state),
+        "show_brief_recap": state.get("awaiting_brief_confirm", False),
+        "session_summary": state.get("session_summary", ""),
+        "collected_requirements": state.get("collected_requirements", {}),
         "brief_updated": state.get("brief_update_pending", False),
+        "streamed": streamed,
     }
     if include_history:
         payload["messages"] = state.get("messages", [])
@@ -197,6 +222,17 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 payload = json.loads(data)
             except json.JSONDecodeError:
                 payload = {"message": data}
+
+            if payload.get("action") == "fill_field":
+                field = payload.get("field")
+                value = payload.get("value", "")
+                if field and value:
+                    state = await mongo_session_store.get(session_id, str(user.id))
+                    collected = state.setdefault("collected_requirements", {})
+                    collected[str(field)] = str(value)[:500]
+                    await mongo_session_store.update(session_id, state)
+                    await websocket.send_json({"type": "field_updated", "field": field, "value": value})
+                continue
 
             if payload.get("action") == "consent":
                 agreement = str(payload.get("agreement", ""))
@@ -254,9 +290,16 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 })
                 continue
 
+
             try:
                 state = await _run_agent_step(session_id, user_message)
-                await _send_assistant_reply(websocket, state)
+                content = _reply_content(state)
+                if content and payload.get("stream", True) and state.get("stage") in ("requirements", "clarify", "identity"):
+                    await websocket.send_json({"type": "stream_start"})
+                    for i in range(0, len(content), 18):
+                        await websocket.send_json({"type": "token", "content": content[i:i + 18]})
+                        await asyncio.sleep(0.015)
+                await _send_assistant_reply(websocket, state, streamed=bool(content))
             except asyncio.TimeoutError:
                 await websocket.send_json({
                     "type": "message",
@@ -334,6 +377,18 @@ async def upload_file(
     state["file_context"] = f"File: {saved_path.name}\nType: {proc_type}\nContent: {extracted[:2000]}"
     await mongo_session_store.update(session_id, state)
 
+    agent_message = None
+    try:
+        loop = asyncio.get_running_loop()
+        def _clarify():
+            s = mongo_session_store.get_sync(session_id)
+            s = proactive_clarify_after_upload(s)
+            mongo_session_store.update_sync(session_id, s)
+            return s.get("pending_reply", "")
+        agent_message = await asyncio.wait_for(loop.run_in_executor(_agent_executor, _clarify), timeout=90.0)
+    except Exception:
+        logger.exception("Proactive clarify after upload failed")
+
     _session_upload_counts[session_id] = file_count + 1
     _session_upload_sizes[session_id] = total_size
 
@@ -342,4 +397,5 @@ async def upload_file(
         "filename": saved_path.name,
         "processing_type": proc_type,
         "description_preview": extracted[:200],
+        "agent_message": agent_message,
     }

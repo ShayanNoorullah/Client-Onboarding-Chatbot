@@ -164,10 +164,16 @@ Rules:
 - Interpret audience slang (Gen Z, Genz, B2B, SMB, MVP) using the term context provided; confirm your understanding in plain language.
 - Ask ONE question at a time from: platform, audience, features, timeline, integrations, design.
 
+Past projects (this user):
+{project_history}
+
 User memory (from past sessions):
 {user_memory_facts}
 
-Keep responses concise (2-4 sentences). Use the ATI context above for service details."""
+Session summary (earlier in this chat):
+{session_summary}
+
+Persona: You are a senior ATI project advisor — warm, professional, and attentive. Acknowledge what the client just shared before asking the next question. Use reflective listening ("You mentioned X — ..."). Keep responses concise (2-4 sentences). Use the ATI context above for service details."""
 
 SUMMARY_EXTRACTION_PROMPT = """Based on the conversation below, extract structured project requirements.
 
@@ -227,6 +233,8 @@ def build_slm_prompt(
     rag_context: str,
     collected_requirements: dict,
     user_memory_facts: list[str] | None = None,
+    project_history_text: str = "",
+    session_summary: str = "",
 ) -> str:
     collected = "\n".join(
         f"- {k}: {v}" for k, v in collected_requirements.items() if v
@@ -239,4 +247,6 @@ def build_slm_prompt(
         rag_context=rag_context or "No additional context.",
         collected_requirements=collected,
         user_memory_facts=memory,
+        project_history=project_history_text or "None yet",
+        session_summary=session_summary or "None yet",
     )
