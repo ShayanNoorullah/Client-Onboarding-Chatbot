@@ -1,25 +1,39 @@
+const MASKED_PASSWORD = "••••••••";
+let pageRoot = null;
+
+function smtpEl(id) {
+  return (pageRoot || document).querySelector(`#${id}`);
+}
+
 async function loadConfig() {
   try {
     const data = await AdminUtils.apiGet("/api/admin/config/smtp");
     const c = data.config;
     if (!c) return;
-    document.getElementById("smtpHost").value = c.smtp_host || "";
-    document.getElementById("smtpPort").value = c.smtp_port || 587;
-    document.getElementById("smtpEncryption").value = c.encryption_protocol || "STARTTLS";
-    document.getElementById("smtpFrom").value = c.from_email || "";
-    document.getElementById("smtpUser").value = c.username || "";
-    document.getElementById("smtpPass").value = c.password || "";
+    smtpEl("smtpHost").value = c.smtp_host || "";
+    smtpEl("smtpPort").value = c.smtp_port || 587;
+    smtpEl("smtpEncryption").value = c.encryption_protocol || "STARTTLS";
+    smtpEl("smtpFrom").value = c.from_email || "";
+    smtpEl("smtpUser").value = c.username || "";
+    const passEl = smtpEl("smtpPass");
+    if (c.password === MASKED_PASSWORD) {
+      passEl.value = "";
+      passEl.placeholder = "Password saved (enter new value to change)";
+    } else {
+      passEl.value = c.password || "";
+      passEl.placeholder = "";
+    }
   } catch (e) { AdminUtils.showToast(e.message, "error"); }
 }
 
 async function saveConfig() {
   const body = {
-    smtp_host: document.getElementById("smtpHost").value,
-    smtp_port: +document.getElementById("smtpPort").value,
-    encryption_protocol: document.getElementById("smtpEncryption").value,
-    from_email: document.getElementById("smtpFrom").value,
-    username: document.getElementById("smtpUser").value,
-    password: document.getElementById("smtpPass").value,
+    smtp_host: smtpEl("smtpHost").value,
+    smtp_port: +smtpEl("smtpPort").value,
+    encryption_protocol: smtpEl("smtpEncryption").value,
+    from_email: smtpEl("smtpFrom").value,
+    username: smtpEl("smtpUser").value,
+    password: smtpEl("smtpPass").value,
   };
   try {
     await AdminUtils.apiPut("/api/admin/config/smtp", body);
@@ -38,17 +52,32 @@ async function testConnection() {
   } catch (e) { AdminUtils.showToast(e.message, "error"); }
 }
 
+function bindPasswordToggle() {
+  const toggleBtn = smtpEl("togglePass");
+  const passInput = smtpEl("smtpPass");
+  if (!toggleBtn || !passInput) return;
+
+  toggleBtn.addEventListener("click", () => {
+    const show = passInput.type === "password";
+    passInput.type = show ? "text" : "password";
+    const icon = toggleBtn.querySelector("i");
+    if (icon) {
+      icon.classList.toggle("fa-eye", !show);
+      icon.classList.toggle("fa-eye-slash", show);
+    }
+    toggleBtn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+  });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   if (!await AdminUtils.checkAdminAuth()) return;
   initAdminLayout("config-smtp", "SMTP CONFIGURATION", [{ label: "Dashboard", href: "/admin/dashboard.html" }, { label: "Configuration" }, { label: "SMTP" }]);
   document.getElementById("adminPageActions").innerHTML = `<button class="btn-admin-primary" id="saveSmtpBtn">Save Configuration</button>`;
-  document.getElementById("adminContent").appendChild(document.getElementById("pageTemplate").content.cloneNode(true));
+  pageRoot = document.getElementById("adminContent");
+  pageRoot.appendChild(document.getElementById("pageTemplate").content.cloneNode(true));
   document.getElementById("saveSmtpBtn").addEventListener("click", saveConfig);
-  document.getElementById("testSmtpBtn").addEventListener("click", () => new bootstrap.Modal(document.getElementById("testModal")).show());
+  smtpEl("testSmtpBtn").addEventListener("click", () => new bootstrap.Modal(document.getElementById("testModal")).show());
   document.getElementById("sendTestBtn").addEventListener("click", testConnection);
-  document.getElementById("togglePass").addEventListener("click", () => {
-    const inp = document.getElementById("smtpPass");
-    inp.type = inp.type === "password" ? "text" : "password";
-  });
+  bindPasswordToggle();
   loadConfig();
 });

@@ -64,6 +64,9 @@ async function loadDashboard() {
       : '<span class="smtp-status-missing">Not Set</span>',
     true,
   );
+  AdminUtils.setStatValue("statTtv", data.avg_time_to_brief_hours ?? 0);
+  AdminUtils.setStatValue("statActivation", data.avg_activation_score ?? 0);
+  AdminUtils.setStatValue("statAtRisk", data.at_risk_sessions ?? 0);
 
   const roleBody = document.getElementById("roleTable");
   if (roleBody) {

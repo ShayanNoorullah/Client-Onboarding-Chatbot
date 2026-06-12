@@ -12,6 +12,7 @@ class ApiKey(Document):
     key_prefix: str
     key_hash: str
     is_active: bool = True
+    scopes: list[str] = Field(default_factory=lambda: ["read:sessions", "read:briefs"])
     created_by: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_used_at: datetime | None = None
@@ -31,6 +32,7 @@ class ApiKey(Document):
             "name": self.name,
             "key_prefix": self.key_prefix,
             "is_active": self.is_active,
+            "scopes": self.scopes,
             "created_by": self.created_by,
             "created_at": self.created_at.isoformat(),
             "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,

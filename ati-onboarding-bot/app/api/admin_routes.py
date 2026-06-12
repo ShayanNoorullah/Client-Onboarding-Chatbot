@@ -27,10 +27,69 @@ def _tenant_id(user: User, request: Request) -> str:
     return get_user_tenant_id(user, request)
 
 
+def _as_utc(dt: datetime | None) -> datetime | None:
+    """Normalize MongoDB datetimes for comparison (legacy rows may be naive UTC)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _avg_turns_to_brief() -> float:
     if not metrics.sessions_completed:
         return 0.0
     return round(metrics.total_turns / metrics.sessions_completed, 1)
+
+
+def _activation_score(session: OnboardingSessionDoc) -> float:
+    score = 0.0
+    if session.consent_given:
+        score += 0.25
+    if session.state and session.state.get("client_name"):
+        score += 0.25
+    if session.project_type:
+        score += 0.25
+    if session.done:
+        score += 0.25
+    return round(score, 2)
+
+
+async def _dashboard_analytics(tenant_id: str) -> dict:
+    now = datetime.now(timezone.utc)
+    at_risk_cutoff = now - timedelta(days=3)
+    sessions = await OnboardingSessionDoc.find(OnboardingSessionDoc.tenant_id == tenant_id).to_list()
+    briefs = await Brief.find(Brief.tenant_id == tenant_id).to_list()
+
+    at_risk = sum(
+        1 for s in sessions
+        if not s.done
+        and (updated := _as_utc(s.updated_at))
+        and updated <= at_risk_cutoff
+    )
+    activation_scores = [_activation_score(s) for s in sessions]
+    avg_activation = round(sum(activation_scores) / len(activation_scores), 2) if activation_scores else 0.0
+
+    ttv_hours: list[float] = []
+    brief_by_session = {b.session_id: b for b in briefs}
+    for s in sessions:
+        if not s.done:
+            continue
+        brief = brief_by_session.get(s.session_id)
+        if brief and s.created_at and brief.created_at:
+            start = _as_utc(s.created_at)
+            end = _as_utc(brief.created_at)
+            if start and end:
+                delta = (end - start).total_seconds() / 3600
+                if delta >= 0:
+                    ttv_hours.append(delta)
+    avg_ttv_hours = round(sum(ttv_hours) / len(ttv_hours), 1) if ttv_hours else 0.0
+
+    return {
+        "at_risk_sessions": at_risk,
+        "avg_activation_score": avg_activation,
+        "avg_time_to_brief_hours": avg_ttv_hours,
+    }
 
 
 async def _enrich_session_summaries(sessions: list) -> list[dict]:
@@ -63,7 +122,7 @@ async def _enrich_session_summaries(sessions: list) -> list[dict]:
 @router.get("/pipeline/project-types")
 async def pipeline_project_types(
     request: Request,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission("Pipeline", "Project Types", "view")),
 ):
     tenant_id = _tenant_id(admin, request)
     pipeline = [
@@ -131,7 +190,7 @@ async def pipeline_project_types(
 
 
 @router.get("/dashboard")
-async def dashboard(request: Request, admin: User = Depends(require_admin)):
+async def dashboard(request: Request, admin: User = Depends(require_permission("Dashboard", "Dashboard", "view"))):
     tenant_id = _tenant_id(admin, request)
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
@@ -219,6 +278,25 @@ async def dashboard(request: Request, admin: User = Depends(require_admin)):
     total_roles = await Role.find(Role.is_active == True).count()
     total_modules = await ApplicationModule.find(ApplicationModule.is_active == True).count()
     smtp_configured = await SmtpConfig.find_one(SmtpConfig.tenant_id == tenant_id) is not None
+    analytics = await _dashboard_analytics(tenant_id)
+    learning_summary: dict = {}
+    try:
+        from app.models.learning_models import AgentFeedbackEvent, PromptValidationRun
+        from app.services.accuracy_service import get_accuracy_summary
+
+        accuracy = await get_accuracy_summary(tenant_id)
+        feedback_total = await AgentFeedbackEvent.find(AgentFeedbackEvent.tenant_id == tenant_id).count()
+        promoted = await PromptValidationRun.find(
+            PromptValidationRun.tenant_id == tenant_id,
+            PromptValidationRun.promoted == True,
+        ).count()
+        learning_summary = {
+            "feedback_total": feedback_total,
+            "promotions": promoted,
+            "accuracy_by_task": accuracy[:5],
+        }
+    except Exception:
+        pass
     return {
         "total_users": total_users,
         "total_users_active": total_users_active,
@@ -244,6 +322,8 @@ async def dashboard(request: Request, admin: User = Depends(require_admin)):
         "total_roles": total_roles,
         "total_modules": total_modules,
         "smtp_configured": smtp_configured,
+        "learning_summary": learning_summary,
+        **analytics,
     }
 
 
@@ -311,7 +391,7 @@ async def export_reports(
 
 @router.get("/users")
 async def list_users(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission("Settings", "User", "view")),
     q: str | None = Query(default=None, max_length=100),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -329,7 +409,7 @@ async def list_users(
 
 
 @router.post("/users")
-async def create_user(body: AdminUserCreate, _: User = Depends(require_admin)):
+async def create_user(body: AdminUserCreate, _: User = Depends(require_permission("Settings", "User", "insert"))):
     if await User.find_one(User.email == body.email.lower()):
         raise HTTPException(status_code=400, detail="Email exists")
     user = User(
@@ -343,7 +423,7 @@ async def create_user(body: AdminUserCreate, _: User = Depends(require_admin)):
 
 
 @router.get("/users/{user_id}")
-async def get_user(user_id: str, _: User = Depends(require_admin)):
+async def get_user(user_id: str, _: User = Depends(require_permission("Settings", "User", "view"))):
     user = await User.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -354,7 +434,7 @@ async def get_user(user_id: str, _: User = Depends(require_admin)):
 async def update_user(
     user_id: str,
     body: AdminUserUpdate,
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_permission("Settings", "User", "update")),
 ):
     user = await User.get(user_id)
     if not user:
@@ -378,7 +458,7 @@ async def update_user(
 
 
 @router.delete("/users/{user_id}")
-async def deactivate_user(user_id: str, _: User = Depends(require_admin)):
+async def deactivate_user(user_id: str, _: User = Depends(require_permission("Settings", "User", "delete"))):
     user = await User.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -389,7 +469,7 @@ async def deactivate_user(user_id: str, _: User = Depends(require_admin)):
 
 @router.get("/sessions")
 async def list_sessions(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission("Pipeline", "Onboarding Sessions", "view")),
     user_id: str | None = None,
     stage: str | None = None,
     q: str | None = Query(default=None, max_length=100),
@@ -428,7 +508,7 @@ async def list_sessions(
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: str, _: User = Depends(require_admin)):
+async def get_session(session_id: str, _: User = Depends(require_permission("Pipeline", "Onboarding Sessions", "view"))):
     doc = await OnboardingSessionDoc.find_one(OnboardingSessionDoc.session_id == session_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -439,7 +519,7 @@ async def get_session(session_id: str, _: User = Depends(require_admin)):
 async def update_session(
     session_id: str,
     body: SessionUpdateRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission("Pipeline", "Onboarding Sessions", "update")),
 ):
     fields_set = body.model_fields_set
     if "title" not in fields_set and "pinned" not in fields_set:
@@ -460,7 +540,7 @@ async def update_session(
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, _: User = Depends(require_admin)):
+async def delete_session(session_id: str, _: User = Depends(require_permission("Pipeline", "Onboarding Sessions", "delete"))):
     doc = await OnboardingSessionDoc.find_one(OnboardingSessionDoc.session_id == session_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -474,7 +554,7 @@ async def delete_session(session_id: str, _: User = Depends(require_admin)):
 
 @router.get("/briefs")
 async def list_all_briefs(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission("Pipeline", "Briefs", "view")),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
@@ -484,7 +564,7 @@ async def list_all_briefs(
 
 
 @router.delete("/briefs/{brief_id}")
-async def admin_delete_brief(brief_id: str, _: User = Depends(require_admin)):
+async def admin_delete_brief(brief_id: str, _: User = Depends(require_permission("Pipeline", "Briefs", "delete"))):
     brief = await Brief.get(brief_id)
     if not brief:
         raise HTTPException(status_code=404, detail="Brief not found")

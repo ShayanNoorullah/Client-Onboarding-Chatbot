@@ -10,6 +10,9 @@ from app.auth.jwt import create_access_token
 from app.auth.passwords import hash_password, verify_password
 from app.config import settings
 from app.models.user import User
+from app.services.email_service import send_templated_email
+from app.services.notification_service import EVENT_USER_REGISTERED, dispatch_event
+from app.services.system_config_service import get_effective_settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -37,6 +40,22 @@ async def register(body: RegisterRequest, response: Response):
         role="user",
     )
     await user.insert()
+    tenant_id = getattr(user, "tenant_id", None) or "default"
+    cfg = await get_effective_settings(tenant_id)
+    await send_templated_email(
+        tenant_id=tenant_id,
+        template_key="welcome",
+        to_email=user.email,
+        variables={
+            "client_name": user.full_name or user.email,
+            "product_name": cfg.get("product_name", "Client Onboarding Agent"),
+        },
+    )
+    await dispatch_event(
+        tenant_id,
+        EVENT_USER_REGISTERED,
+        {"user_id": str(user.id), "email": user.email, "full_name": user.full_name},
+    )
     token = create_access_token(str(user.id), user.role)
     _set_auth_cookie(response, token)
     return {"user": user.to_public(), "message": "Registration successful"}

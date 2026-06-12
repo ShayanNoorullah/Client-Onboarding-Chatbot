@@ -30,7 +30,54 @@ from app.models.user import User
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 ADMIN_ROLE_NAMES = {"Admin", "Super Admin"}
+SUPER_ADMIN_ROLE = "Super Admin"
+ADMIN_ROLE = "Admin"
 MASKED_PASSWORD = "••••••••"
+
+
+def _actor_is_super_admin(user: User) -> bool:
+    return bool(user.is_super_admin or user.role_name == SUPER_ADMIN_ROLE)
+
+
+def _target_is_super_admin(user: User) -> bool:
+    return bool(user.is_super_admin or user.role_name == SUPER_ADMIN_ROLE)
+
+
+async def _get_role_by_name(role_name: str) -> Role | None:
+    return await Role.find_one(Role.name == role_name)
+
+
+async def _validate_role_assignment(
+    actor: User,
+    role_name: str,
+    *,
+    target_user: User | None = None,
+) -> None:
+    """Enforce role assignment policy: Super Admin is singleton; only Super Admin assigns Admin."""
+    if role_name == SUPER_ADMIN_ROLE:
+        raise HTTPException(status_code=400, detail="Super Admin role cannot be assigned")
+
+    role_doc = await _get_role_by_name(role_name)
+    if not role_doc:
+        raise HTTPException(status_code=400, detail=f"Role '{role_name}' does not exist")
+    if not role_doc.is_active:
+        raise HTTPException(status_code=400, detail=f"Role '{role_name}' is inactive")
+
+    if target_user and _target_is_super_admin(target_user):
+        raise HTTPException(status_code=400, detail="Super Admin user role cannot be changed")
+
+    actor_super = _actor_is_super_admin(actor)
+
+    if role_name == ADMIN_ROLE and not actor_super:
+        raise HTTPException(status_code=403, detail="Only Super Admin can assign the Admin role")
+
+    if (
+        target_user
+        and target_user.role_name == ADMIN_ROLE
+        and role_name != ADMIN_ROLE
+        and not actor_super
+    ):
+        raise HTTPException(status_code=403, detail="Only Super Admin can change Admin role assignments")
 
 
 def _paginate(items: list, page: int, limit: int) -> dict:
@@ -142,6 +189,23 @@ async def delete_role(role_id: str, _: User = Depends(require_admin)):
 # ── USERS ──────────────────────────────────────────────────────────────────
 
 
+@router.get("/users/assignable-roles")
+async def list_assignable_roles(
+    current_admin: User = Depends(require_permission("Settings", "User", "view")),
+):
+    """Roles the current admin may assign when creating or editing users."""
+    roles = await Role.find(Role.is_active == True).sort(+Role.sort_order, +Role.name).to_list()
+    actor_super = _actor_is_super_admin(current_admin)
+    assignable = []
+    for role in roles:
+        if role.name == SUPER_ADMIN_ROLE:
+            continue
+        if role.name == ADMIN_ROLE and not actor_super:
+            continue
+        assignable.append(role.to_dict())
+    return {"roles": assignable}
+
+
 @router.get("/users")
 async def list_settings_users(
     _: User = Depends(require_permission("Settings", "User", "view")),
@@ -180,6 +244,7 @@ async def create_settings_user(
         raise HTTPException(status_code=400, detail="Email already exists")
     if body.username and await User.find_one(User.username == body.username):
         raise HTTPException(status_code=400, detail="Username already exists")
+    await _validate_role_assignment(admin, body.role_name)
     user = User(
         email=email,
         password_hash=hash_password(body.password),
@@ -187,6 +252,7 @@ async def create_settings_user(
         username=body.username,
         role_name=body.role_name,
         role=_sync_role_field(body.role_name),
+        is_super_admin=False,
         is_active=body.is_active,
         tenant_id=admin.tenant_id or "default",
     )
@@ -222,15 +288,20 @@ async def update_settings_user(
             if existing and str(existing.id) != str(user.id):
                 raise HTTPException(status_code=400, detail="Username already exists")
         user.username = body.username or None
-    if body.role_name is not None:
-        if str(user.id) == str(current_admin.id) and body.role_name not in ADMIN_ROLE_NAMES:
-            raise HTTPException(status_code=400, detail="Cannot demote yourself")
-        if user.role == "admin" and body.role_name not in ADMIN_ROLE_NAMES:
-            admin_count = await User.find(User.role == "admin", User.is_active == True).count()
+    if body.role_name is not None and body.role_name != user.role_name:
+        if str(user.id) == str(current_admin.id):
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+        await _validate_role_assignment(current_admin, body.role_name, target_user=user)
+        if user.role_name == ADMIN_ROLE and body.role_name != ADMIN_ROLE:
+            admin_count = await User.find(
+                User.role_name == ADMIN_ROLE,
+                User.is_active == True,
+            ).count()
             if admin_count <= 1:
-                raise HTTPException(status_code=400, detail="Cannot remove the last admin")
+                raise HTTPException(status_code=400, detail="Cannot remove the last Admin")
         user.role_name = body.role_name
         user.role = _sync_role_field(body.role_name)
+        user.is_super_admin = False
     if body.is_active is not None:
         user.is_active = body.is_active
     await user.save()
@@ -246,10 +317,16 @@ async def patch_settings_user(
     user = await User.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if not body.is_active and user.role == "admin":
-        admin_count = await User.find(User.role == "admin", User.is_active == True).count()
-        if admin_count <= 1:
-            raise HTTPException(status_code=400, detail="Cannot deactivate the last admin")
+    if not body.is_active:
+        if _target_is_super_admin(user):
+            raise HTTPException(status_code=400, detail="Cannot deactivate Super Admin")
+        if user.role_name == ADMIN_ROLE:
+            admin_count = await User.find(
+                User.role_name == ADMIN_ROLE,
+                User.is_active == True,
+            ).count()
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="Cannot deactivate the last Admin")
     user.is_active = body.is_active
     await user.save()
     return {"user": user.to_public()}
@@ -266,6 +343,8 @@ async def delete_settings_user(
     user = await User.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if _target_is_super_admin(user):
+        raise HTTPException(status_code=400, detail="Cannot delete Super Admin")
     if hard:
         await user.delete()
         return {"status": "deleted", "id": user_id}

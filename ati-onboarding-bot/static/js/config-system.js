@@ -7,6 +7,14 @@ const FIELD_MAP = {
   phone: "phone",
 };
 
+function parseEmailList(value) {
+  return (value || "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function formatEmailList(arr) {
+  return (arr || []).join(", ");
+}
+
 async function loadSystemConfig() {
   const data = await AdminUtils.apiGet("/api/admin/config/system");
   const c = data.config || {};
@@ -16,6 +24,11 @@ async function loadSystemConfig() {
   });
   document.getElementById("emailNotif").checked = c.email_notifications_enabled !== false;
   document.getElementById("followUp").checked = c.follow_up_enabled !== false;
+  document.getElementById("notifTo").value = formatEmailList(c.notification_to_emails);
+  document.getElementById("notifCc").value = formatEmailList(c.notification_cc_emails);
+  if (document.getElementById("defaultLang")) {
+    document.getElementById("defaultLang").value = c.default_language || "en";
+  }
 }
 
 async function saveSystemConfig() {
@@ -27,6 +40,10 @@ async function saveSystemConfig() {
   });
   body.email_notifications_enabled = document.getElementById("emailNotif").checked;
   body.follow_up_enabled = document.getElementById("followUp").checked;
+  body.notification_to_emails = parseEmailList(document.getElementById("notifTo").value);
+  body.notification_cc_emails = parseEmailList(document.getElementById("notifCc").value);
+  const langEl = document.getElementById("defaultLang");
+  if (langEl) body.default_language = langEl.value;
   await AdminUtils.apiPut("/api/admin/config/system", body);
   AdminUtils.showToast("System configuration saved");
 }

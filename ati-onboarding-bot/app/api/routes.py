@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import time
 import json
 import logging
@@ -21,12 +22,15 @@ from app.services.agent_metrics import metrics, timed
 from app.processors.file_router import is_supported, process_file
 from app.rag.embedder import embed_text
 from app.services.brief_service import persist_brief_to_mongo
+from app.services.feedback_service import ingest_feedback, record_turn, task_type_for_stage
+from app.services.learning_constraints_service import build_learned_constraints_text
 from app.services.learning_service import (
     extract_and_store_facts,
-    get_user_memory_facts,
     get_user_memory_context,
     learn_from_completed_session,
+    store_correction_fact,
 )
+from app.services.prompt_registry import get_active_prompt
 from app.storage.file_manager import (
     get_project_folder_from_state,
     save_asset,
@@ -54,6 +58,7 @@ def _run_agent_step_sync(session_id: str, user_message: str | None = None) -> di
 
 async def _hydrate_memory(state: dict) -> None:
     user_id = state.get("user_id")
+    tenant_id = state.get("tenant_id", "default")
     if user_id:
         ctx = await get_user_memory_context(user_id)
         state["user_memory_facts"] = ctx.get("facts", [])
@@ -63,6 +68,10 @@ async def _hydrate_memory(state: dict) -> None:
             {"ref_id": b.ref_id, "client_name": b.client_name, "created_at": b.created_at.isoformat()}
             for b in briefs
         ]
+    slm_template, prompt_version = await get_active_prompt("slm", tenant_id)
+    state["slm_prompt_template"] = slm_template
+    state["prompt_version"] = prompt_version
+    state["learned_constraints"] = await build_learned_constraints_text(user_id, tenant_id)
 
 
 async def _run_agent_step(session_id: str, user_message: str | None = None) -> dict:
@@ -88,6 +97,21 @@ async def _run_agent_step(session_id: str, user_message: str | None = None) -> d
 
     elapsed = (time.perf_counter() - turn_start) * 1000
     metrics.record_turn(state.get("stage", "?"), elapsed, used_fallback=state.get("used_fallback", False))
+    if user_message:
+        rag_ctx = state.get("last_rag_context", "")
+        rag_hash = hashlib.sha256(rag_ctx.encode()).hexdigest()[:16] if rag_ctx else ""
+        turn_id = await record_turn(
+            tenant_id=state.get("tenant_id", "default"),
+            session_id=session_id,
+            user_id=state.get("user_id"),
+            stage=state.get("stage", ""),
+            user_input=user_message,
+            assistant_output=_reply_content(state),
+            prompt_version=state.get("prompt_version", "v2.0"),
+            rag_context_hash=rag_hash,
+        )
+        state["last_turn_id"] = turn_id
+        await mongo_session_store.update(session_id, state)
     if state.get("done"):
         had_brief = bool(state.get("brief_id"))
         brief_id = await persist_brief_to_mongo(state)
@@ -174,6 +198,7 @@ async def _send_assistant_reply(websocket: WebSocket, state: dict, *, include_hi
         "collected_requirements": state.get("collected_requirements", {}),
         "brief_updated": state.get("brief_update_pending", False),
         "streamed": streamed,
+        "turn_id": state.get("last_turn_id"),
     }
     if include_history:
         payload["messages"] = state.get("messages", [])
@@ -251,6 +276,28 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 state = record_modal_consent(state)
                 await mongo_session_store.update(session_id, state)
                 await _send_assistant_reply(websocket, state, include_history=True)
+                continue
+
+            if payload.get("action") in ("feedback.thumbs", "feedback.step", "feedback.correction"):
+                fb_state = await mongo_session_store.get(session_id, str(user.id))
+                fb_type = payload.get("action", "").replace("feedback.", "")
+                if fb_type == "thumbs":
+                    fb_type = "thumbs_up" if payload.get("signal", 1) > 0 else "thumbs_down"
+                signal = int(payload.get("signal", 0))
+                comment = str(payload.get("comment", ""))
+                if fb_type == "correction" and comment:
+                    await store_correction_fact(str(user.id), comment)
+                await ingest_feedback(
+                    tenant_id=fb_state.get("tenant_id", "default"),
+                    user_id=str(user.id),
+                    feedback_type=fb_type,
+                    signal=signal,
+                    comment=comment,
+                    session_id=session_id,
+                    turn_id=payload.get("turn_id"),
+                    task_type=task_type_for_stage(payload.get("stage", fb_state.get("stage", ""))),
+                )
+                await websocket.send_json({"type": "feedback_ack"})
                 continue
 
             if payload.get("action") == "generate_brief":

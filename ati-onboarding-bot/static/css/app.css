@@ -1058,6 +1058,20 @@ html[data-chat-density="compact"] .typing-row {
   background: var(--muted);
   cursor: pointer;
 }
+.msg-feedback {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  opacity: 0.7;
+}
+.msg-thumb {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+}
+.msg-thumb:hover { opacity: 1; }
 .streaming-bubble::after {
   content: '';
   display: inline-block;

@@ -143,7 +143,12 @@ async def update_system_config(
 ):
     tenant_id = _tenant_id(admin, request)
     doc = await get_or_create_system_config(tenant_id)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    if updates.get("docuseal_api_key") == MASKED_PASSWORD:
+        updates.pop("docuseal_api_key", None)
+    for field, value in updates.items():
+        if field == "docuseal_api_key" and value:
+            value = encrypt_text(value)
         setattr(doc, field, value)
     doc.updated_by = admin.email
     doc.updated_at = datetime.now(timezone.utc)

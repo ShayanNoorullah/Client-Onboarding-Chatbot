@@ -31,6 +31,7 @@
 21. [v3.2 Admin Platform & RBAC](#21-v32-admin-platform--rbac)
 22. [v3.8 Admin UX & SaaS Settings](#22-v38-admin-ux--saas-settings)
 23. [Roadmap](#23-roadmap)
+24. [Notification & Integration Architecture (v3.9)](#24-notification--integration-architecture-v39)
 
 ---
 
@@ -563,6 +564,7 @@ ati-onboarding-bot/
 ├── requirements.txt
 ├── .env / .env.example
 ├── README.md
+├── SETUP.md                   # Complete setup guide (SMTP, webhooks, integrations, RBAC)
 ├── IMPLEMENTATION.md          # This file
 ├── Run.txt                    # Quick start commands
 │
@@ -1156,6 +1158,25 @@ Run: `pytest tests/ -v`
 | **Project folders** | `client_data/{name}/{YYYY-MM-DD_sessionid}/` per project |
 | **Learning** | `UserMemory` MongoDB model; `learning_service.py` — per-user facts + global `ati_kb/learned_patterns.txt` |
 
+### Self-learning loop (v3.9+)
+
+Closed-loop improvement on top of RAG — see [SELF_LEARNING.md](SELF_LEARNING.md).
+
+| Component | Location |
+|-----------|----------|
+| Feedback events | `AgentFeedbackEvent`, `POST /api/feedback`, WebSocket `feedback.*` |
+| Turn context | `TurnRecord` — input, output, prompt version, RAG hash per agent turn |
+| Learning examples | `LearningExample` — success/failure rows for validation replay |
+| Prompt versions | `prompt_registry.py` — `active` / `shadow` / `retired`; seeds from `prompts.py` |
+| Shadow improvement | `prompt_improvement_service.py` — failure → minimal constraint patch |
+| Validation gate | `prompt_validation_service.py` — replay failures + successes; auto-promote |
+| Accuracy | `accuracy_service.py`, `TaskAccuracySnapshot` — per `task_type` rolling score |
+| Pattern quality | `pattern_quality_service.py` — deprecate patterns correlated with negative feedback |
+| Admin UI | `/admin/learning.html`, `GET /api/admin/learning/report` |
+| Scheduler | `learning_scheduler.py` — validation queue every 5 minutes |
+
+RAG (`ati_kb`, `ati_kb_learned`, client, memory) is unchanged; `{learned_constraints}` augments SLM prompts from high-quality patterns and user corrections.
+
 ---
 
 ## 21. v3.2 Admin Platform & RBAC
@@ -1276,6 +1297,8 @@ Frontend (`static/js/admin.js`): manual refresh, 60-second auto-refresh, error t
 | Workspace | `/admin/config-tenant.html` |
 | API Keys | `/admin/config-api-keys.html` |
 | Usage & Limits | `/admin/config-usage.html` |
+| Webhooks | `/admin/config-webhooks.html` |
+| Integrations | `/admin/config-integrations.html` |
 | Application Action | `/admin/settings-actions.html` |
 | Application Module | `/admin/settings-modules.html` |
 | Application Page | `/admin/settings-pages.html` |
@@ -1295,16 +1318,50 @@ Recommended next steps (not yet implemented):
 2. **Split KB files** — `mobile_apps.txt`, `integrations.txt`, etc. for cleaner chunking
 3. **SLM upgrade** — Test `qwen2.5:7b` for requirements stage if 3B model drifts
 4. **Production deployment** — Docker + Ollama sidecar, HTTPS reverse proxy, staging/production KB versions
-5. **Notification system** — Email alerts to management on new brief requests; client acknowledgement (see `Run.txt` product notes)
-6. **Enforce RBAC at API layer** — Permission checks on admin routes beyond page-level UI gating
+5. **Office 365 OAuth SMTP** — For tenants that block basic SMTP AUTH
+6. **At-risk session auto-alerts** — Email/webhook when sessions idle beyond threshold
 
 **Recently completed (moved from roadmap):**
 
-- Brief PDF/plain-text export (`app/services/brief_export.py`)
-- AI vs system config split (`AiConfig`, `SystemConfig`)
-- SaaS workspace pages (tenant, API keys, usage, audit)
-- Role permission matrix with configurable application actions
-- Dashboard accuracy fixes and agent metrics card
+- Notification system — email to client + management on brief; welcome on register (`notification_service.py`, `email_service.py`)
+- Outbound webhooks with delivery log (`webhook_dispatcher.py`, `config-webhooks.html`)
+- Slack/Teams + DocuSeal integration config (`config-integrations.html`)
+- Client portal + magic links (`portal.html`, `magic_link_service.py`)
+- Dashboard TTV / activation / at-risk metrics
+- In-app notification inbox (`/api/notifications`, chat bell)
+- RBAC enforcement on admin API routes (`require_permission`)
+- Brief PDF/plain-text export, AI/system config split, SaaS workspace, role permissions
+
+---
+
+## 24. Notification & Integration Architecture (v3.9)
+
+### Event dispatcher (`app/services/notification_service.py`)
+
+| Event | Trigger | Channels |
+|-------|---------|----------|
+| `brief.created` | `brief_service.persist_brief_to_mongo` | Email (client + management), webhooks, Slack/Teams, admin inbox |
+| `user.registered` | `auth_routes.register` | Webhooks, Slack/Teams |
+| `session.created` | `user_routes.create_session` | Webhooks, Slack/Teams |
+
+### Webhook protocol
+
+```json
+{
+  "event": "brief.created",
+  "timestamp": "ISO-8601",
+  "data": { "brief_id": "...", "client_name": "...", "portal_link": "..." }
+}
+```
+
+Optional header: `X-Webhook-Signature` (HMAC-SHA256 of body with subscription secret).
+
+### Portal auth
+
+- Portal tokens: JWT with `purpose=portal`, `brief_id`, 30-day expiry (`magic_link_service.py`)
+- Magic link tokens: JWT with `purpose=magic_link`, `session_id`, 24-hour expiry
+
+**Setup:** See [SETUP.md](SETUP.md) for SMTP, webhooks, integrations, DocuSeal, and verification checklist.
 
 ---
 
@@ -1331,4 +1388,4 @@ Recommended next steps (not yet implemented):
 
 ---
 
-*Document generated for the ATI Onboarding Bot project. For setup instructions see `README.md`; for quick commands see `Run.txt`.*
+*Document generated for the ATI Onboarding Bot project. For setup instructions see [SETUP.md](SETUP.md); for quick commands see `Run.txt`.*

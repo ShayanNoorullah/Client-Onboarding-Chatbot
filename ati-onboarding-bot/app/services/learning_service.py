@@ -90,8 +90,32 @@ async def extract_and_store_facts(
         logger.exception("Failed to extract user memory facts")
 
 
+async def store_correction_fact(user_id: str | None, comment: str) -> None:
+    if not user_id or not comment.strip():
+        return
+    mem = await UserMemory.find_one(UserMemory.user_id == user_id)
+    if not mem:
+        mem = UserMemory(user_id=user_id)
+    fact = f"[correction] {comment.strip()[:280]}"
+    if fact not in mem.facts:
+        mem.facts.append(fact)
+    mem.facts = mem.facts[-20:]
+    mem.updated_at = datetime.now(timezone.utc)
+    if mem.id:
+        await mem.save()
+    else:
+        await mem.insert()
+
+
 async def learn_from_completed_session(state: dict) -> None:
     """Embed session insights and append anonymized global patterns."""
+    from app.services.feedback_service import session_has_negative_feedback
+
+    session_id = state.get("session_id")
+    if session_id and await session_has_negative_feedback(session_id):
+        logger.info("Skipping global pattern learn for session %s (negative feedback)", session_id)
+        return
+
     user_id = state.get("user_id")
     client_name = state.get("client_name")
     workspace_slug = state.get("workspace_slug")
@@ -146,13 +170,18 @@ async def learn_from_completed_session(state: dict) -> None:
             metadata={"workspace": workspace_slug},
         )
 
-    _append_global_pattern(collected, requirements)
+    await _append_global_pattern(state.get("tenant_id", "default"), collected, requirements, session_id)
+
+
+async def _append_global_pattern(
+    tenant_id: str,
+    collected: dict,
+    requirements: dict,
+    session_id: str | None,
+) -> None:
+    from app.models.learning_models import LearnedPatternRecord
     from app.services.kb_reindex import reindex_learned_patterns
 
-    reindex_learned_patterns()
-
-
-def _append_global_pattern(collected: dict, requirements: dict) -> None:
     patterns_file = settings.ATI_KB_ROOT / "learned_patterns.txt"
     patterns_file.parent.mkdir(parents=True, exist_ok=True)
     pt = collected.get("project_type", "unknown")
@@ -167,7 +196,17 @@ def _append_global_pattern(collected: dict, requirements: dict) -> None:
         f"project_type={pt}; audience={audience}; services={services_str}\n"
     )
     try:
+        rec = LearnedPatternRecord(
+            tenant_id=tenant_id,
+            line=line.strip(),
+            project_type=str(pt),
+            quality_score=1.0,
+            source="session",
+            session_id=session_id,
+        )
+        await rec.insert()
         with patterns_file.open("a", encoding="utf-8") as f:
             f.write(line)
+        reindex_learned_patterns()
     except Exception:
         logger.exception("Failed to append learned pattern")

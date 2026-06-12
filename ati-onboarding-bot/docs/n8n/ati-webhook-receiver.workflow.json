@@ -1,0 +1,252 @@
+{
+  "name": "ATI Onboarding — Webhook Receiver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ati-onboarding",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "f1a2b3c4-1111-4000-8000-000000000001",
+      "name": "ATI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ati-onboarding-receiver"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalizes ATI webhook body for Route by Event (no crypto — works with empty Secret)\nconst items = $input.all();\n\nreturn items.map((item) => {\n  const body = item.json.body ?? item.json;\n  return {\n    json: {\n      event: body.event,\n      timestamp: body.timestamp,\n      data: body.data || {},\n    },\n  };\n});"
+      },
+      "id": "f1a2b3c4-1111-4000-8000-000000000002",
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "brief.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "brief.created"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "user.registered",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "user.registered"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "session.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "session.created"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "test.ping",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "test.ping"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "f1a2b3c4-1111-4000-8000-000000000003",
+      "name": "Route by Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {},
+      "id": "f1a2b3c4-1111-4000-8000-000000000004",
+      "name": "Brief Created",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [980, 120],
+      "notes": "Replace with CRM, email, or Slack nodes. Data: $json.data"
+    },
+    {
+      "parameters": {},
+      "id": "f1a2b3c4-1111-4000-8000-000000000005",
+      "name": "User Registered",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [980, 260],
+      "notes": "Replace with welcome sequence or CRM lead create"
+    },
+    {
+      "parameters": {},
+      "id": "f1a2b3c4-1111-4000-8000-000000000006",
+      "name": "Session Created",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [980, 400],
+      "notes": "Replace with analytics or nurture workflow"
+    },
+    {
+      "parameters": {},
+      "id": "f1a2b3c4-1111-4000-8000-000000000007",
+      "name": "Test Ping",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [980, 540],
+      "notes": "Triggered by ATI admin Test button"
+    },
+    {
+      "parameters": {},
+      "id": "f1a2b3c4-1111-4000-8000-000000000008",
+      "name": "Other Events",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [980, 680],
+      "notes": "brief.updated, session.completed, session.abandoned, etc."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "ATI Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Payload": {
+      "main": [
+        [
+          {
+            "node": "Route by Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event": {
+      "main": [
+        [
+          {
+            "node": "Brief Created",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "User Registered",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Session Created",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Ping",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Other Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ati-webhook-receiver-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

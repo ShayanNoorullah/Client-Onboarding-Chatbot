@@ -79,20 +79,41 @@ class BriefFeedbackRequest(BaseModel):
 @router.post("/{brief_id}/feedback")
 async def submit_brief_feedback(brief_id: str, body: BriefFeedbackRequest, user: User = Depends(get_current_user)):
     brief = await _get_brief_for_user(brief_id, user)
+    from app.services.feedback_service import ingest_feedback
+
+    signal = 1 if body.rating >= 4 else -1 if body.rating <= 2 else 0
     existing = await BriefFeedback.find_one(BriefFeedback.brief_id == brief_id, BriefFeedback.user_id == str(user.id))
     if existing:
         existing.rating = body.rating
         existing.comment = body.comment
         await existing.save()
-        return {"feedback": existing.to_public()}
-    fb = BriefFeedback(
+        fb = existing
+    else:
+        fb = BriefFeedback(
+            user_id=str(user.id),
+            brief_id=brief_id,
+            session_id=brief.session_id,
+            rating=body.rating,
+            comment=body.comment,
+        )
+        await fb.insert()
+
+    await ingest_feedback(
+        tenant_id=user.tenant_id or "default",
         user_id=str(user.id),
-        brief_id=brief_id,
-        session_id=brief.session_id,
-        rating=body.rating,
+        feedback_type="brief_rating",
+        signal=signal,
         comment=body.comment,
+        session_id=brief.session_id,
+        brief_id=brief_id,
+        task_type="brief_generation",
+        context={"rating": body.rating},
     )
-    await fb.insert()
+    if signal < 0 and brief.session_id:
+        from app.services.pattern_quality_service import deprecate_patterns_for_session
+
+        await deprecate_patterns_for_session(brief.session_id)
+
     return {"feedback": fb.to_public()}
 
 @router.delete("/{brief_id}")

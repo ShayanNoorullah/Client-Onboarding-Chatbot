@@ -1,4 +1,4 @@
-let usersPage = 1, usersLimit = 10, usersSearch = "", rolesCache = [];
+let usersPage = 1, usersLimit = 10, usersSearch = "", rolesCache = [], currentAdminUser = null;
 
 function roleBadge(name) {
   if (name === "Admin") return `<span class="badge-role-admin">${name}</span>`;
@@ -6,11 +6,50 @@ function roleBadge(name) {
   return `<span class="badge-role-user">${name}</span>`;
 }
 
-async function loadRolesDropdown() {
-  const data = await AdminUtils.apiGet("/api/admin/settings/roles?limit=100");
-  rolesCache = (data.roles || []).sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99));
+function isSuperAdminUser(user) {
+  return !!(user?.is_super_admin || user?.role_name === "Super Admin");
+}
+
+function roleSelectLocked(targetUser) {
+  if (!targetUser) return false;
+  if (isSuperAdminUser(targetUser)) return true;
+  if (targetUser.role_name === "Admin" && !isSuperAdminUser(currentAdminUser)) return true;
+  return false;
+}
+
+async function loadRolesDropdown(editingUser = null) {
+  const data = await AdminUtils.apiGet("/api/admin/settings/users/assignable-roles");
+  rolesCache = data.roles || [];
   const sel = document.getElementById("userRole");
-  if (sel) sel.innerHTML = rolesCache.map((r) => `<option value="${r.name}">${r.name}</option>`).join("");
+  const hint = document.getElementById("userRoleHint");
+  if (!sel) return;
+
+  const locked = roleSelectLocked(editingUser);
+  const options = rolesCache.map((r) => `<option value="${r.name}">${r.name}</option>`);
+
+  if (editingUser && locked) {
+    sel.innerHTML = `<option value="${editingUser.role_name}">${editingUser.role_name}</option>`;
+    sel.disabled = true;
+    if (hint) {
+      hint.textContent = isSuperAdminUser(editingUser)
+        ? "Super Admin is assigned to a single account and cannot be changed here."
+        : "Only Super Admin can change Admin role assignments.";
+      hint.classList.remove("d-none");
+    }
+  } else {
+    sel.innerHTML = options.length
+      ? options.join("")
+      : `<option value="User">User</option>`;
+    sel.disabled = false;
+    if (hint) {
+      if (!isSuperAdminUser(currentAdminUser)) {
+        hint.textContent = "Admins can assign non-Admin roles. Only Super Admin can grant or revoke the Admin role.";
+        hint.classList.remove("d-none");
+      } else {
+        hint.classList.add("d-none");
+      }
+    }
+  }
 }
 
 async function loadUsers() {
@@ -26,13 +65,14 @@ async function loadUsers() {
     } else {
       tbody.innerHTML = users.map((u) => {
         const uname = u.username || u.email.split("@")[0];
+        const canDelete = !isSuperAdminUser(u) && u.id !== currentAdminUser?.id;
         return `<tr>
           <td><div style="position:relative">
             <button class="action-btn" data-action-menu="${u.id}">Action ▼</button>
             <div class="action-dropdown" id="menu-${u.id}">
               <button data-edit="${u.id}">Edit</button>
-              <button data-toggle="${u.id}" data-active="${u.is_active}">${u.is_active ? "Deactivate" : "Activate"}</button>
-              <button class="danger" data-delete="${u.id}">Delete</button>
+              ${!isSuperAdminUser(u) ? `<button data-toggle="${u.id}" data-active="${u.is_active}">${u.is_active ? "Deactivate" : "Activate"}</button>` : ""}
+              ${canDelete ? `<button class="danger" data-delete="${u.id}">Delete</button>` : ""}
             </div></div></td>
           <td>${u.full_name}</td>
           <td>${roleBadge(u.role_name || "User")}</td>
@@ -73,11 +113,17 @@ function bindUserActions() {
   }));
 }
 
-function openAddModal() {
+async function openAddModal() {
   document.getElementById("userForm").reset();
   document.getElementById("userId").value = "";
+  document.getElementById("userEmail").readOnly = false;
   document.getElementById("userPasswordWrap").style.display = "";
   document.getElementById("userModalTitle").textContent = "Add User";
+  await loadRolesDropdown(null);
+  if (rolesCache.length) {
+    const defaultRole = rolesCache.find((r) => r.name === "User") || rolesCache[0];
+    document.getElementById("userRole").value = defaultRole.name;
+  }
   new bootstrap.Modal(document.getElementById("userModal")).show();
 }
 
@@ -89,10 +135,11 @@ async function openEditModal(id) {
   document.getElementById("userEmail").value = u.email;
   document.getElementById("userEmail").readOnly = true;
   document.getElementById("userUsername").value = u.username || "";
-  document.getElementById("userRole").value = u.role_name || "User";
   document.getElementById("userActive").checked = u.is_active;
   document.getElementById("userPasswordWrap").style.display = "none";
   document.getElementById("userModalTitle").textContent = "Edit User";
+  await loadRolesDropdown(u);
+  document.getElementById("userRole").value = u.role_name || "User";
   new bootstrap.Modal(document.getElementById("userModal")).show();
 }
 
@@ -100,18 +147,22 @@ async function saveUser() {
   const form = document.getElementById("userForm");
   if (!form.checkValidity()) { form.reportValidity(); return; }
   const id = document.getElementById("userId").value;
+  const roleSel = document.getElementById("userRole");
   const body = {
     full_name: document.getElementById("userFullName").value,
     username: document.getElementById("userUsername").value || null,
-    role_name: document.getElementById("userRole").value,
     is_active: document.getElementById("userActive").checked,
   };
+  if (!roleSel.disabled) {
+    body.role_name = roleSel.value;
+  }
   try {
     if (id) {
       await AdminUtils.apiPut(`/api/admin/settings/users/${id}`, body);
     } else {
       await AdminUtils.apiPost("/api/admin/settings/users", {
         ...body,
+        role_name: roleSel.value,
         email: document.getElementById("userEmail").value,
         password: document.getElementById("userPassword").value,
       });
@@ -120,13 +171,13 @@ async function saveUser() {
     AdminUtils.showToast("User saved");
     loadUsers();
   } catch (e) {
-    AdminUtils.showToast(e.message, "error");
+    AdminUtils.showToast(AdminUtils.formatApiError(e), "error");
   }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const user = await AdminUtils.checkAdminAuth();
-  if (!user) return;
+  currentAdminUser = await AdminUtils.checkAdminAuth();
+  if (!currentAdminUser) return;
   initAdminLayout("settings-users", "USER", [
     { label: "Dashboard", href: "/admin/dashboard.html" },
     { label: "Settings" },
@@ -139,7 +190,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     (q) => { usersSearch = q; usersPage = 1; loadUsers(); });
   document.getElementById("addUserBtn").addEventListener("click", openAddModal);
   document.getElementById("saveUserBtn").addEventListener("click", saveUser);
-  await loadRolesDropdown();
   await loadUsers();
 });
 

@@ -50,8 +50,16 @@ async def create_session(user: User = Depends(get_current_user)):
     if not allowed:
         raise HTTPException(status_code=403, detail=message)
 
+    tenant_id = user.tenant_id or "default"
     state = await mongo_session_store.create(
-        str(user.id), user.full_name, tenant_id=user.tenant_id or "default"
+        str(user.id), user.full_name, tenant_id=tenant_id
+    )
+    from app.services.notification_service import EVENT_SESSION_CREATED, dispatch_event
+
+    await dispatch_event(
+        tenant_id,
+        EVENT_SESSION_CREATED,
+        {"session_id": state["session_id"], "user_id": str(user.id), "stage": state["stage"]},
     )
     return {"session_id": state["session_id"], "stage": state["stage"]}
 

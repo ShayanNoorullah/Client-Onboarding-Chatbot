@@ -134,6 +134,31 @@ class SystemConfigUpdate(BaseModel):
     max_files_per_session: int | None = None
     email_notifications_enabled: bool | None = None
     follow_up_enabled: bool | None = None
+    notification_to_emails: list[str] | None = None
+    notification_cc_emails: list[str] | None = None
+    slack_webhook_url: str | None = None
+    teams_webhook_url: str | None = None
+    docuseal_api_url: str | None = None
+    docuseal_api_key: str | None = None
+    docuseal_nda_template_id: str | None = None
+    default_language: str | None = None
+
+
+class WebhookSubscriptionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=1, max_length=500)
+    secret: str = ""
+    event_types: list[str] = Field(default_factory=list)
+    max_retries: int = Field(default=3, ge=1, le=10)
+
+
+class WebhookSubscriptionUpdate(BaseModel):
+    name: str | None = None
+    url: str | None = None
+    secret: str | None = None
+    event_types: list[str] | None = None
+    is_active: bool | None = None
+    max_retries: int | None = None
 
 
 class ModelProfileUpdate(BaseModel):
@@ -245,3 +270,16 @@ class UserPreferencesUpdate(BaseModel):
     ati_auto_scroll: str | None = None
     ati_reduce_motion: str | None = None
     ati_ui_animations: str | None = None
+
+
+class FeedbackSubmitRequest(BaseModel):
+    feedback_type: str
+    signal: int = 0
+    comment: str = ""
+    session_id: str | None = None
+    turn_id: str | None = None
+    brief_id: str | None = None
+    task_type: str = ""
+    stage: str = ""
+    rating: int | None = None
+    context: dict | None = None

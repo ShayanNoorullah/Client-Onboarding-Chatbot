@@ -110,7 +110,10 @@ def _invoke_llm(state: OnboardingState, user_input: str | None = None) -> str:
         user_memory_facts=state.get("user_memory_facts"),
         project_history_text=_format_project_history(state),
         session_summary=state.get("session_summary", ""),
+        learned_constraints=state.get("learned_constraints", "None yet"),
+        slm_template=state.get("slm_prompt_template"),
     )
+    state["last_rag_context"] = rag_context
 
     lc_messages = [SystemMessage(content=system)]
     for msg in state.get("messages", [])[-6:]:
@@ -160,7 +163,10 @@ def build_llm_messages(state: OnboardingState, user_input: str | None = None) ->
         user_memory_facts=state.get("user_memory_facts"),
         project_history_text=_format_project_history(state),
         session_summary=state.get("session_summary", ""),
+        learned_constraints=state.get("learned_constraints", "None yet"),
+        slm_template=state.get("slm_prompt_template"),
     )
+    state["last_rag_context"] = rag_context
     lc_messages = [SystemMessage(content=system)]
     for msg in state.get("messages", [])[-6:]:
         if msg["role"] == "user":

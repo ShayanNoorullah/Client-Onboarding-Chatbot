@@ -18,6 +18,14 @@ def _env_defaults() -> dict[str, Any]:
         "max_files_per_session": settings.MAX_FILES_PER_SESSION,
         "email_notifications_enabled": True,
         "follow_up_enabled": True,
+        "notification_to_emails": [],
+        "notification_cc_emails": [],
+        "slack_webhook_url": "",
+        "teams_webhook_url": "",
+        "docuseal_api_url": "",
+        "docuseal_api_key": "",
+        "docuseal_nda_template_id": "",
+        "default_language": "en",
     }
 
 
@@ -40,7 +48,11 @@ async def get_effective_settings(tenant_id: str = "default") -> dict[str, Any]:
     if doc:
         for field in merged:
             val = getattr(doc, field, None)
-            if val is not None and val != "":
+            if val is None:
+                continue
+            if isinstance(val, list):
+                merged[field] = val
+            elif val != "":
                 merged[field] = val
 
     _cache[tenant_id] = (now, merged)

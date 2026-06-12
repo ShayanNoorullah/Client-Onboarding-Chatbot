@@ -33,10 +33,25 @@
       </div>
     </div>
     <div class="form-section-card">
+      <div class="section-header"><i class="fa fa-bell me-2"></i>Notification Recipients</div>
+      <div class="section-body form-grid-2">
+        <div class="col-span-2">
+          <label class="form-label">Management To (comma-separated)</label>
+          <input class="form-control" id="notifTo" placeholder="admin@example.com, manager@example.com">
+        </div>
+        <div class="col-span-2">
+          <label class="form-label">Management CC (comma-separated)</label>
+          <input class="form-control" id="notifCc" placeholder="optional@example.com">
+        </div>
+      </div>
+    </div>
+    <div class="form-section-card">
       <div class="section-header"><i class="fa fa-flag me-2"></i>Feature Flags</div>
       <div class="section-body form-grid-2">
         <div class="form-check"><input type="checkbox" class="form-check-input" id="emailNotif"><label class="form-check-label" for="emailNotif">Email notifications</label></div>
         <div class="form-check"><input type="checkbox" class="form-check-input" id="followUp"><label class="form-check-label" for="followUp">Follow-up emails</label></div>
+        <div><label class="form-label">Default language</label>
+          <select class="form-select" id="defaultLang"><option value="en">English</option><option value="es">Spanish</option></select></div>
       </div>
     </div>
     <button type="button" class="btn-admin-primary" id="saveSystemBtn">Save Configuration</button>
@@ -50,6 +65,6 @@
   <script src="/static/js/sidebar-rail.js?v=3.8.4"></script>
   <script src="/static/js/admin-layout.js?v=3.8.4"></script>
   <script src="/static/js/admin-shell.js?v=3.8.4"></script>
-  <script src="/static/js/config-system.js?v=3.8.4"></script>
+  <script src="/static/js/config-system.js?v=3.9.1"></script>
 </body>
 </html>

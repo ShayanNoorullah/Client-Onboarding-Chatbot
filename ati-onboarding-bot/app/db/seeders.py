@@ -75,6 +75,9 @@ def _default_page_defs() -> list[dict]:
         {"module_name": "Configuration", "page_name": "Workspace", "route": "/admin/config-tenant.html", "sort_order": 6},
         {"module_name": "Configuration", "page_name": "API Keys", "route": "/admin/config-api-keys.html", "sort_order": 7},
         {"module_name": "Configuration", "page_name": "Usage & Limits", "route": "/admin/config-usage.html", "sort_order": 8},
+        {"module_name": "Configuration", "page_name": "Webhooks", "route": "/admin/config-webhooks.html", "sort_order": 9},
+        {"module_name": "Configuration", "page_name": "Integrations", "route": "/admin/config-integrations.html", "sort_order": 10},
+        {"module_name": "Configuration", "page_name": "Learning", "route": "/admin/learning.html", "sort_order": 11},
         {"module_name": "Settings", "page_name": "Application Action", "route": "/admin/settings-actions.html", "sort_order": 1},
         {"module_name": "Settings", "page_name": "Application Module", "route": "/admin/settings-modules.html", "sort_order": 2},
         {"module_name": "Settings", "page_name": "Application Page", "route": "/admin/settings-pages.html", "sort_order": 3},
@@ -226,6 +229,35 @@ DEFAULT_EMAIL_TEMPLATES = [
         "body_text": "Hi {{client_name}}, resume: {{session_link}}",
         "variables": ["client_name", "session_link", "stage"],
     },
+    {
+        "key": "brief_submitted_admin",
+        "name": "New Brief — Management Alert",
+        "subject": "New client brief submitted — {{client_name}}",
+        "body_html": (
+            "<p>A new project brief has been submitted.</p>"
+            "<ul>"
+            "<li><strong>Client:</strong> {{client_name}}</li>"
+            "<li><strong>Email:</strong> {{user_email}}</li>"
+            "<li><strong>Project type:</strong> {{project_type}}</li>"
+            "<li><strong>Reference:</strong> {{ref_id}}</li>"
+            "</ul>"
+            "<p><a href=\"{{brief_link}}\">Download brief</a></p>"
+            "<p>{{brief_summary}}</p>"
+        ),
+        "body_text": (
+            "New brief from {{client_name}} ({{user_email}}). "
+            "Project: {{project_type}}. Ref: {{ref_id}}. Link: {{brief_link}}"
+        ),
+        "variables": ["client_name", "user_email", "brief_link", "brief_summary", "project_type", "ref_id"],
+    },
+    {
+        "key": "session_magic_link",
+        "name": "Session Magic Link",
+        "subject": "Resume your onboarding session",
+        "body_html": "<p>Hi {{client_name}}, <a href=\"{{session_link}}\">click here to resume</a> your session.</p>",
+        "body_text": "Hi {{client_name}}, resume: {{session_link}}",
+        "variables": ["client_name", "session_link"],
+    },
 ]
 
 
@@ -352,6 +384,9 @@ async def migrate_config_pages() -> None:
         {"module_name": "Configuration", "page_name": "Workspace", "route": "/admin/config-tenant.html", "sort_order": 6},
         {"module_name": "Configuration", "page_name": "API Keys", "route": "/admin/config-api-keys.html", "sort_order": 7},
         {"module_name": "Configuration", "page_name": "Usage & Limits", "route": "/admin/config-usage.html", "sort_order": 8},
+        {"module_name": "Configuration", "page_name": "Webhooks", "route": "/admin/config-webhooks.html", "sort_order": 9},
+        {"module_name": "Configuration", "page_name": "Integrations", "route": "/admin/config-integrations.html", "sort_order": 10},
+        {"module_name": "Configuration", "page_name": "Learning", "route": "/admin/learning.html", "sort_order": 11},
         {"module_name": "Settings", "page_name": "Audit Log", "route": "/admin/settings-audit.html", "sort_order": 6},
     ]
     for page_def in new_pages:

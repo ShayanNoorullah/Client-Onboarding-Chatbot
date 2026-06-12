@@ -55,11 +55,15 @@
 
         <div><label class="form-label">Username *</label><input class="form-control" id="smtpUser"></div>
 
-        <div><label class="form-label">Password *</label>
-
-        <div class="input-group"><input type="password" class="form-control" id="smtpPass">
-
-        <button class="btn btn-outline-secondary" type="button" id="togglePass"><i class="fa fa-eye"></i></button></div></div>
+        <div>
+          <label class="form-label">Password *</label>
+          <div class="input-group">
+            <input type="password" class="form-control" id="smtpPass" autocomplete="new-password">
+            <button class="btn btn-outline-secondary" type="button" id="togglePass" aria-label="Show password">
+              <i class="fa fa-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
 
       </div>
 
@@ -87,7 +91,7 @@
   <script src="/static/js/sidebar-rail.js?v=3.8.4"></script>
   <script src="/static/js/admin-layout.js?v=3.8.4"></script>
   <script src="/static/js/admin-shell.js?v=3.8.4"></script>
-  <script src="/static/js/config-smtp.js?v=3.8.4"></script>
+  <script src="/static/js/config-smtp.js?v=3.9.1"></script>
 </body>
 
 </html>

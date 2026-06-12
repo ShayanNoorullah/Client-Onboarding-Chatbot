@@ -23,6 +23,18 @@ from app.models.tenant import Tenant
 from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.models.user_memory import UserMemory
+from app.models.webhook_delivery import WebhookDelivery
+from app.models.webhook_subscription import WebhookSubscription
+from app.models.notification import Notification
+from app.models.learning_models import (
+    AgentFeedbackEvent,
+    LearnedPatternRecord,
+    LearningExample,
+    PromptValidationRun,
+    PromptVersion,
+    TaskAccuracySnapshot,
+    TurnRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +66,22 @@ async def connect_mongodb() -> None:
             AuditEvent,
             ApiKey,
             UsageRecord,
+            WebhookSubscription,
+            WebhookDelivery,
+            Notification,
+            TurnRecord,
+            AgentFeedbackEvent,
+            LearningExample,
+            PromptVersion,
+            PromptValidationRun,
+            LearnedPatternRecord,
+            TaskAccuracySnapshot,
         ],
     )
     await run_all_seeders()
+    from app.services.prompt_registry import ensure_prompt_seeds
+
+    await ensure_prompt_seeds("default")
     logger.info("Connected to MongoDB: %s", settings.MONGODB_DB_NAME)
 
 

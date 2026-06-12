@@ -62,16 +62,36 @@ function scrollMessagesToBottom() {
   if (container) container.scrollTop = container.scrollHeight;
 }
 
-function appendMessage(role, content) {
+function appendMessage(role, content, meta = {}) {
   if (!content?.trim()) return;
   const container = document.getElementById("messages");
   const row = document.createElement("div");
   row.className = `msg-row ${role}`;
-  row.innerHTML = `<div class="msg-bubble">${linkify(content)}</div>`;
+  let extra = "";
+  if (role === "assistant" && meta.turn_id) {
+    row.dataset.turnId = meta.turn_id;
+    extra = `<div class="msg-feedback"><button type="button" class="msg-thumb" data-signal="1" title="Helpful">👍</button><button type="button" class="msg-thumb" data-signal="-1" title="Not helpful">👎</button></div>`;
+  }
+  row.innerHTML = `<div class="msg-bubble">${linkify(content)}</div>${extra}`;
   container.appendChild(row);
+  row.querySelectorAll(".msg-thumb").forEach((btn) => {
+    btn.addEventListener("click", () => sendMessageFeedback(meta.turn_id, Number(btn.dataset.signal)));
+  });
   if (typeof animateMessageRow === "function") animateMessageRow(row);
   scrollMessagesToBottom();
   updateEmptyState();
+}
+
+function sendMessageFeedback(turnId, signal) {
+  if (!ws || ws.readyState !== WebSocket.OPEN || !turnId) return;
+  let comment = "";
+  if (signal < 0) {
+    comment = window.prompt("What could be better? (optional)") || "";
+    if (comment) {
+      ws.send(JSON.stringify({ action: "feedback.correction", turn_id: turnId, comment }));
+    }
+  }
+  ws.send(JSON.stringify({ action: "feedback.thumbs", turn_id: turnId, signal, comment }));
 }
 
 function renderHistory(messages) {
@@ -309,12 +329,23 @@ function showBriefRecap(data) {
 async function submitBriefFeedback(rating) {
   const briefId = window._lastBriefId;
   if (!briefId) return;
+  let comment = "";
+  if (rating <= 2) {
+    comment = window.prompt("What could we improve? (optional)") || "";
+  }
   try {
-    await API.post(`/api/briefs/${briefId}/feedback`, { rating, comment: "" });
+    await API.post(`/api/briefs/${briefId}/feedback`, { rating, comment });
     document.getElementById("briefFeedback")?.classList.add("d-none");
   } catch (e) {
     console.error(e);
   }
+}
+
+function showBriefFeedbackPanel(briefId) {
+  if (!briefId || window._briefFeedbackShown === briefId) return;
+  window._lastBriefId = briefId;
+  window._briefFeedbackShown = briefId;
+  document.getElementById("briefFeedback")?.classList.remove("d-none");
 }
 
 function updateStatus(data) {
@@ -343,7 +374,23 @@ function handleServerMessage(data) {
   if (data.messages?.length) {
     renderHistory(data.messages);
   } else if (data.streamed && streamedContent) {
-    if (streamingBubble) streamingBubble.innerHTML = linkify(streamedContent);
+    if (streamingBubble) {
+      streamingBubble.innerHTML = linkify(streamedContent);
+      streamingBubble.classList.remove("streaming-bubble");
+      const row = streamingBubble.closest(".msg-row");
+      if (row && data.turn_id) {
+        row.dataset.turnId = data.turn_id;
+        if (!row.querySelector(".msg-feedback")) {
+          const fb = document.createElement("div");
+          fb.className = "msg-feedback";
+          fb.innerHTML = '<button type="button" class="msg-thumb" data-signal="1" title="Helpful">👍</button><button type="button" class="msg-thumb" data-signal="-1" title="Not helpful">👎</button>';
+          row.appendChild(fb);
+          fb.querySelectorAll(".msg-thumb").forEach((btn) => {
+            btn.addEventListener("click", () => sendMessageFeedback(data.turn_id, Number(btn.dataset.signal)));
+          });
+        }
+      }
+    }
     streamingBubble = null;
     streamedContent = "";
   } else if (data.content?.trim()) {
@@ -356,8 +403,12 @@ function handleServerMessage(data) {
       scrollMessagesToBottom();
       updateEmptyState();
     } else {
-      appendMessage("assistant", data.content);
+      appendMessage("assistant", data.content, { turn_id: data.turn_id });
     }
+  }
+
+  if (data.brief_id && data.done) {
+    showBriefFeedbackPanel(data.brief_id);
   }
 
   renderChips(data.suggestions);
@@ -421,6 +472,7 @@ function connectWS() {
         scrollMessagesToBottom();
         return;
       }
+      if (data.type === "feedback_ack") return;
       if (data.type === "consent_error") {
         waiting = false;
         showConsentError(data.message);
@@ -682,6 +734,32 @@ async function initSessionForUser() {
   await newSession();
 }
 
+async function pollNotifications() {
+  try {
+    const data = await API.get("/api/notifications?unread_only=true&limit=1");
+    const badge = document.getElementById("notifBadge");
+    const count = data.unread_count || 0;
+    if (badge) {
+      badge.textContent = count;
+      badge.classList.toggle("d-none", count === 0);
+    }
+  } catch (_) { /* ignore */ }
+}
+
+async function loadNotifications() {
+  try {
+    const data = await API.get("/api/notifications?limit=20");
+    const items = (data.notifications || []).map((n) =>
+      `• ${n.title}${n.body ? " — " + n.body : ""}`
+    ).join("\n");
+    alert(items || "No notifications");
+    await API.post("/api/notifications/read-all", {});
+    pollNotifications();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   currentUser = await requireAuth();
   if (!currentUser) return;
@@ -690,8 +768,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   document.getElementById("userName").textContent = currentUser.full_name;
+  if (typeof I18n !== "undefined") {
+    const pref = currentUser.preferences?.preferred_language;
+    if (pref) I18n.setLang(pref);
+    else I18n.applyI18n();
+  }
   if (currentUser.role === "admin") {
     document.getElementById("adminLink")?.classList.remove("d-none");
+  }
+  const bell = document.getElementById("notifBell");
+  if (bell) {
+    bell.classList.remove("d-none");
+    bell.addEventListener("click", () => loadNotifications());
+    pollNotifications();
+    setInterval(pollNotifications, 60000);
   }
 
   document.getElementById("sidebarToggle")?.addEventListener("click", toggleSidebar);

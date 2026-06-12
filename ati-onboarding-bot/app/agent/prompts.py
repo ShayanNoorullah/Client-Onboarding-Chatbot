@@ -173,6 +173,9 @@ User memory (from past sessions):
 Session summary (earlier in this chat):
 {session_summary}
 
+Learned constraints (from verified feedback):
+{learned_constraints}
+
 Persona: You are a senior ATI project advisor — warm, professional, and attentive. Acknowledge what the client just shared before asking the next question. Use reflective listening ("You mentioned X — ..."). Keep responses concise (2-4 sentences). Use the ATI context above for service details."""
 
 SUMMARY_EXTRACTION_PROMPT = """Based on the conversation below, extract structured project requirements.
@@ -182,6 +185,10 @@ Return a JSON object with these fields:
 - items: list of requirement bullet points (strings)
 - contact_preference: how client prefers to be contacted (or "Not specified")
 - recommended_services: list of ATI services that match this project (from conversation and RAG context)
+- security_requirements: list of security needs (auth, encryption, access control, etc.) or empty list
+- compliance_requirements: list of regulatory/compliance needs (HIPAA, SOC2, GDPR, etc.) or empty list
+- data_handling: brief paragraph on data storage, retention, and sensitivity (or "To be confirmed with ATI advisor")
+- integration_access: list of systems, APIs, or access requirements (or empty list)
 
 Conversation:
 {conversation}
@@ -235,12 +242,19 @@ def build_slm_prompt(
     user_memory_facts: list[str] | None = None,
     project_history_text: str = "",
     session_summary: str = "",
+    learned_constraints: str = "None yet",
+    preferred_language: str = "en",
+    slm_template: str | None = None,
 ) -> str:
     collected = "\n".join(
         f"- {k}: {v}" for k, v in collected_requirements.items() if v
     ) or "None yet"
     memory = "\n".join(f"- {f}" for f in (user_memory_facts or [])) or "None yet"
-    return SLM_SYSTEM_PROMPT.format(
+    lang_hint = ""
+    if preferred_language and preferred_language != "en":
+        lang_hint = f"\nRespond in the user's preferred language: {preferred_language}."
+    template = slm_template or SLM_SYSTEM_PROMPT
+    base = template.format(
         client_name=client_name or "Not yet provided",
         stage=stage,
         assets_count=assets_count,
@@ -249,4 +263,6 @@ def build_slm_prompt(
         user_memory_facts=memory,
         project_history=project_history_text or "None yet",
         session_summary=session_summary or "None yet",
+        learned_constraints=learned_constraints or "None yet",
     )
+    return base + lang_hint

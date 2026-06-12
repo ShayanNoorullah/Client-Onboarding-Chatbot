@@ -22,6 +22,10 @@ def test_write_summary_all_sections(tmp_path, monkeypatch):
                 "Mortgage Website Development Services",
                 "Custom Mortgage Development",
             ],
+            "security_requirements": ["HTTPS everywhere", "Role-based access"],
+            "compliance_requirements": ["GLBA alignment"],
+            "data_handling": "PII stored in US-only cloud with encryption at rest.",
+            "integration_access": ["Encompass LOS API", "Salesforce CRM"],
         },
         "assets": [str(folder / "assets" / "homepage_inspo.jpg")],
         "asset_descriptions": {
@@ -38,7 +42,14 @@ def test_write_summary_all_sections(tmp_path, monkeypatch):
     assert "## 3. Requirements" in content
     assert "## 4. Provided Assets" in content
     assert "## 5. ATI Services Recommended" in content
-    assert "## 6. Next Steps" in content
+    assert "## 6. Security Requirements" in content
+    assert "## 7. Compliance & Regulatory" in content
+    assert "## 8. Data Handling" in content
+    assert "## 9. Integration & Access" in content
+    assert "## 10. Next Steps" in content
+    assert "HTTPS everywhere" in content
+    assert "GLBA alignment" in content
+    assert "Encompass LOS API" in content
     assert "Mortgage Website Development Services" in content
     assert "homepage_inspo.jpg" in content
     assert "support@awesometechinc.com" in content

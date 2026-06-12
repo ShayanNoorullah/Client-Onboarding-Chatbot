@@ -30,6 +30,7 @@ class AiConfig(Document):
     rag_memory_chars: int = 300
     rag_learned_chars: int = 300
     prompt_version: str = "v2.0"
+    learning_enabled: bool = True
     models: list[ModelProfile] = Field(default_factory=list)
     updated_by: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -51,6 +52,7 @@ class AiConfig(Document):
             "rag_memory_chars": self.rag_memory_chars,
             "rag_learned_chars": self.rag_learned_chars,
             "prompt_version": self.prompt_version,
+            "learning_enabled": self.learning_enabled,
             "models": [m.model_dump() for m in self.models],
             "updated_by": self.updated_by,
             "updated_at": self.updated_at.isoformat(),

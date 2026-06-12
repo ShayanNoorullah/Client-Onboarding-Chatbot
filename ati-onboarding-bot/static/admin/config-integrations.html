@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Integrations — Client Onboarding Agent Admin</title>
+  <script src="/static/js/theme-bootstrap.js?v=3.9.0"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/css/app.css" rel="stylesheet">
+  <link href="/static/css/admin-v2.css?v=3.9.0" rel="stylesheet">
+</head>
+<body>
+  <div id="adminRoot" class="admin-layout"></div>
+  <template id="pageTemplate">
+    <div class="alert alert-info small mb-3">
+      <strong>Setup guide</strong> (see <code>SETUP.md</code> Sections 9–10):
+      Slack/Teams URLs come from each workspace’s incoming-webhook connector.
+      DocuSeal needs API URL, API key, and NDA template ID — then send NDAs via
+      <code>POST /api/admin/signatures/briefs/{id}/nda</code> from the Briefs pipeline.
+    </div>
+    <div class="form-section-card">
+      <div class="section-header">Slack / Microsoft Teams</div>
+      <div class="section-body">
+        <div class="mb-3"><label class="form-label">Slack Incoming Webhook URL</label><input class="form-control" id="slackUrl"></div>
+        <div class="mb-3"><label class="form-label">Teams Incoming Webhook URL</label><input class="form-control" id="teamsUrl"></div>
+      </div>
+    </div>
+    <div class="form-section-card">
+      <div class="section-header">DocuSeal (E-Signature)</div>
+      <div class="section-body form-grid-2">
+        <div><label class="form-label">API URL</label><input class="form-control" id="docusealUrl" placeholder="https://docuseal.example.com/api"></div>
+        <div><label class="form-label">API Key</label><input type="password" class="form-control" id="docusealKey"></div>
+        <div><label class="form-label">NDA Template ID</label><input class="form-control" id="docusealTemplate"></div>
+      </div>
+    </div>
+    <div class="form-section-card">
+      <div class="section-header">CRM / Zapier Sample Payload</div>
+      <div class="section-body">
+        <p class="small text-secondary">Subscribe to <code>brief.created</code> via Webhooks. Example payload:</p>
+        <pre class="bg-light p-3 small" id="samplePayload"></pre>
+        <button class="btn btn-outline-secondary btn-sm" id="copyPayloadBtn">Copy payload</button>
+      </div>
+    </div>
+    <button class="btn-admin-primary" id="saveIntegrationsBtn">Save Integrations</button>
+  </template>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/api.js?v=3.9.0"></script>
+  <script src="/static/js/auth.js?v=3.9.0"></script>
+  <script src="/static/js/admin-utils.js?v=3.9.0"></script>
+  <script src="/static/js/sidebar-rail.js?v=3.9.0"></script>
+  <script src="/static/js/admin-layout.js?v=3.9.0"></script>
+  <script src="/static/js/admin-shell.js?v=3.9.0"></script>
+  <script src="/static/js/config-integrations.js?v=3.9.0"></script>
+</body>
+</html>

@@ -2,6 +2,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def _section_list(title: str, items: list | str | None, fallback: str = "To be confirmed with ATI advisor.") -> list[str]:
+    lines = [f"## {title}"]
+    if isinstance(items, list) and items:
+        lines.extend(f"- {item}" for item in items)
+    elif isinstance(items, str) and items.strip():
+        lines.append(items.strip())
+    else:
+        lines.append(fallback)
+    return lines
+
+
 def write_summary(client_folder: Path, state: dict) -> Path:
     """Generate summary.md from the final conversation state."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -51,12 +62,18 @@ def write_summary(client_folder: Path, state: dict) -> Path:
     else:
         services_text = str(recommended)
 
+    lines += ["", "## 5. ATI Services Recommended", services_text, ""]
+    lines += _section_list("6. Security Requirements", reqs.get("security_requirements"))
+    lines.append("")
+    lines += _section_list("7. Compliance & Regulatory", reqs.get("compliance_requirements"))
+    lines.append("")
+    lines += _section_list("8. Data Handling", reqs.get("data_handling"))
+    lines.append("")
+    lines += _section_list("9. Integration & Access", reqs.get("integration_access"))
+
     lines += [
         "",
-        "## 5. ATI Services Recommended",
-        services_text,
-        "",
-        "## 6. Next Steps",
+        "## 10. Next Steps",
         "- [ ] ATI advisor review within 3 business days",
         "- [ ] NDA signing (1–2 business days)",
         "- [ ] Project scope & cost proposal (3–5 business days)",

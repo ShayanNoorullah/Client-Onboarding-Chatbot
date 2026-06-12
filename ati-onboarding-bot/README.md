@@ -12,11 +12,12 @@ AI-powered client onboarding for **Awesome Technologies Inc.** — login-first, 
 - **File uploads** (PDF, DOCX, images, XLSX, TXT) with RAG indexing and vision description
 - **Downloadable briefs** (`.md` and PDF export support)
 - **User preferences** and per-user learning memory
+- **Feedback loop** — per-message thumbs, brief ratings, shadow prompt validation (see [SELF_LEARNING.md](SELF_LEARNING.md))
 
 ### Admin platform
 - **Dashboard** — KPIs, stage funnel (including completed), 7-day activity, Ollama health, agent metrics, auto-refresh
 - **Pipeline** — onboarding sessions, briefs, configurable project types
-- **Configuration** — AI config (Ollama models per purpose), system config, SMTP, email templates, follow-up timing
+- **Configuration** — AI config (Ollama models per purpose), system config, SMTP, email templates, follow-up timing, **agent learning** dashboard
 - **SaaS workspace** — tenant profile, API keys, usage & limits, audit log
 - **Settings / RBAC** — application modules, pages, actions, roles with configurable permission matrix, users
 - **Reports** — CSV export
@@ -54,7 +55,9 @@ uvicorn main:app --host 127.0.0.1 --port 8001 --reload
 | [http://127.0.0.1:8001/admin/dashboard.html](http://127.0.0.1:8001/admin/dashboard.html) | Admin dashboard |
 | [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) | OpenAPI docs |
 
-See `Run.txt` for copy-paste commands and `IMPLEMENTATION.md` for full architecture reference.
+**Full setup guide:** [SETUP.md](SETUP.md) — installation, SMTP, notifications, webhooks, integrations, DocuSeal, portal, RBAC, troubleshooting.
+
+See `Run.txt` for copy-paste commands and `IMPLEMENTATION.md` for architecture reference.
 
 ## Environment variables
 
@@ -72,6 +75,10 @@ See `Run.txt` for copy-paste commands and `IMPLEMENTATION.md` for full architect
 
 Per-tenant AI and system settings can also be managed in the admin UI and override env defaults at runtime.
 
+### SMTP & notifications
+
+Configure in the admin UI (not `.env`). See **[SETUP.md — Section 6 & 7](SETUP.md#6-smtp--office-365)** for the full Office 365 guide, management recipients, and email template verification.
+
 ## API overview
 
 | Area | Prefix / endpoints |
@@ -84,6 +91,10 @@ Per-tenant AI and system settings can also be managed in the admin UI and overri
 | Config | `GET/PUT /api/admin/config/ai`, `/system`, `/smtp`, `/email-templates`, `/follow-up-rules` |
 | Settings | `GET/POST/PUT /api/admin/settings/roles`, `/users`, `/modules`, `/pages`, `/actions` |
 | Tenants | `GET/PATCH /api/admin/tenants/current`, `/usage`, `/api-keys` (super-admin: list/create tenants) |
+| Webhooks | `GET/POST/PUT/DELETE /api/admin/webhooks`, `/deliveries`, `/{id}/test` |
+| Notifications | `GET /api/notifications`, `PATCH /{id}/read`, `POST /read-all` |
+| Portal | `GET /api/portal/brief/{token}`, `POST /api/auth/magic-link` |
+| Signatures | `POST /api/admin/signatures/briefs/{id}/nda` |
 | Audit | `GET /api/admin/audit` |
 | Health | `GET /health` |
 
@@ -99,7 +110,7 @@ Application actions (view, insert, update, delete, or custom keys) are managed u
 
 ## Tests
 
-**98 tests** across auth, agent, RAG, admin dashboard, config, settings, tenants, and more:
+**106 tests** across auth, agent, RAG, admin dashboard, config, settings, webhooks, portal, notifications, and more:
 
 ```powershell
 pytest tests/ -v
@@ -134,6 +145,8 @@ ati-onboarding-bot/
 
 | File | Contents |
 |------|----------|
-| `IMPLEMENTATION.md` | Full architecture, flowcharts, API protocol, evolution history |
-| `Run.txt` | Quick command reference |
-| `.env.example` | All supported environment variables |
+| **[SETUP.md](SETUP.md)** | **Complete setup guide** — install, SMTP, email, webhooks, Slack/Teams, DocuSeal, portal, RBAC, troubleshooting |
+| [docs/n8n/README.md](docs/n8n/README.md) | n8n webhook integration — import sample workflow, wire ATI admin |
+| `IMPLEMENTATION.md` | Architecture, flowcharts, API protocol, evolution history |
+| `Run.txt` | Quick command reference and admin URLs |
+| `.env.example` | Environment variable template with generation commands |

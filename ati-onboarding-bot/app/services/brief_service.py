@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from app.models.brief import Brief
 from app.models.user import User
 from app.services.email_service import send_templated_email
+from app.services.magic_link_service import create_portal_token
+from app.services.notification_service import EVENT_BRIEF_CREATED, dispatch_event
 from app.storage.file_manager import get_summary_path
 
 
@@ -55,17 +57,55 @@ async def persist_brief_to_mongo(state: dict) -> str | None:
     await brief.insert()
 
     user = await User.get(state["user_id"])
+    brief_link = f"/api/briefs/{brief.id}/download"
+    portal_token = create_portal_token(brief_id=str(brief.id), tenant_id=tenant_id)
+    portal_link = f"/portal.html?token={portal_token}"
+    summary_preview = markdown[:500] if markdown else ""
+    project_type = state.get("collected_requirements", {}).get("project_type", "Not specified")
+    if isinstance(state.get("requirements"), dict):
+        project_type = state["requirements"].get("project_type", project_type)
+
+    email_vars = {
+        "client_name": client_name,
+        "brief_link": brief_link,
+        "brief_summary": summary_preview,
+        "product_name": "Client Onboarding Agent",
+        "portal_link": portal_link,
+    }
+    admin_vars = {
+        "client_name": client_name,
+        "user_email": user.email if user else "unknown",
+        "brief_link": brief_link,
+        "brief_summary": summary_preview,
+        "project_type": str(project_type),
+        "ref_id": ref_id,
+    }
+
     if user and user.email:
-        summary_preview = markdown[:500] if markdown else ""
         await send_templated_email(
             tenant_id=tenant_id,
             template_key="brief_ready",
             to_email=user.email,
-            variables={
-                "client_name": client_name,
-                "brief_link": f"/api/briefs/{brief.id}/download",
-                "brief_summary": summary_preview,
-            },
+            variables=email_vars,
         )
+
+    await dispatch_event(
+        tenant_id,
+        EVENT_BRIEF_CREATED,
+        {
+            "brief_id": str(brief.id),
+            "ref_id": ref_id,
+            "client_name": client_name,
+            "user_email": user.email if user else None,
+            "project_type": str(project_type),
+            "portal_link": portal_link,
+        },
+        email_template="brief_submitted_admin",
+        email_variables=admin_vars,
+        notify_admins=True,
+        admin_title="New client brief submitted",
+        admin_body=f"{client_name} submitted a new brief ({ref_id})",
+        admin_link=f"/admin/briefs.html",
+    )
 
     return str(brief.id)

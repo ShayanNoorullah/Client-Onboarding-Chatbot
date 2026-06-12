@@ -17,6 +17,9 @@ const ADMIN_NAV = [
       { id: "config-tenant", label: "Workspace", href: "/admin/config-tenant.html", icon: "fa-building" },
       { id: "config-api-keys", label: "API Keys", href: "/admin/config-api-keys.html", icon: "fa-key" },
       { id: "config-usage", label: "Usage & Limits", href: "/admin/config-usage.html", icon: "fa-chart-pie" },
+      { id: "config-webhooks", label: "Webhooks", href: "/admin/config-webhooks.html", icon: "fa-plug" },
+      { id: "config-integrations", label: "Integrations", href: "/admin/config-integrations.html", icon: "fa-puzzle-piece" },
+      { id: "config-learning", label: "Learning", href: "/admin/learning.html", icon: "fa-brain" },
     ],
   },
   {
