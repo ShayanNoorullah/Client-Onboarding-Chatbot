@@ -8,6 +8,7 @@ from app.storage.session_display import display_name_for_session
 
 
 class OnboardingSessionDoc(Document):
+    tenant_id: str = "default"
     user_id: Indexed(str)
     session_id: Indexed(str, unique=True)
     stage: str = "greeting"

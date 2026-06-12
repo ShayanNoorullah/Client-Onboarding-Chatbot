@@ -1,7 +1,9 @@
 from fastapi import Cookie, Depends, HTTPException, Request, WebSocket, status
 
 from app.auth.jwt import decode_access_token
+from app.auth.tenant_context import get_request_tenant_id, get_user_tenant_id
 from app.config import settings
+from app.models.role import Role
 from app.models.user import User
 
 
@@ -33,6 +35,34 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
+
+
+async def require_super_admin(user: User = Depends(require_admin)) -> User:
+    if not user.is_super_admin and user.role_name != "Super Admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
+    return user
+
+
+def require_permission(module: str, page: str, action: str):
+    async def _checker(user: User = Depends(require_admin)) -> User:
+        if user.is_super_admin or user.role_name in ("Admin", "Super Admin"):
+            return user
+        role = await Role.find_one(Role.name == user.role_name)
+        if not role:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Role not found")
+        perms = role.permissions.get(module, {}).get(page, {})
+        if not perms.get(action, False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {module}/{page}/{action}",
+            )
+        return user
+
+    return _checker
+
+
+def tenant_filter(user: User, request: Request) -> str:
+    return get_user_tenant_id(user, request)
 
 
 async def get_ws_user(websocket: WebSocket) -> User | None:

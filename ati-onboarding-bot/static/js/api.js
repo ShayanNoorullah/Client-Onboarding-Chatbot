@@ -1,5 +1,7 @@
 const AUTH_USER_CACHE_KEY = "ati_auth_user";
 
+let _sessionFetchPromise = null;
+
 const API = {
   async request(path, options = {}) {
     const headers = { ...(options.headers || {}) };
@@ -49,45 +51,62 @@ function clearAuthSession(userId) {
   if (userId) {
     localStorage.removeItem(`ati_session_id_${userId}`);
   }
+  _sessionFetchPromise = null;
+}
+
+/** Single in-flight /api/auth/me request shared across the app. */
+async function fetchSessionUser() {
+  if (_sessionFetchPromise) {
+    return _sessionFetchPromise;
+  }
+  _sessionFetchPromise = (async () => {
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) {
+        clearAuthSession(readCachedAuthUser()?.id);
+        return null;
+      }
+      const data = await res.json();
+      const user = data.user || null;
+      if (user) {
+        cacheAuthUser(user);
+      } else {
+        clearAuthSession();
+      }
+      return user;
+    } catch {
+      return readCachedAuthUser();
+    } finally {
+      _sessionFetchPromise = null;
+    }
+  })();
+  return _sessionFetchPromise;
 }
 
 async function fetchAuthUser() {
-  try {
-    const res = await fetch("/api/auth/me", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) {
-      clearAuthSession(readCachedAuthUser()?.id);
-      return null;
-    }
-    const data = await res.json();
-    const user = data.user || null;
-    if (user) {
-      cacheAuthUser(user);
-    } else {
-      clearAuthSession();
-    }
-    return user;
-  } catch {
-    return readCachedAuthUser();
-  }
+  return fetchSessionUser();
+}
+
+async function verifySession() {
+  return fetchSessionUser();
 }
 
 async function getCurrentUserOptional() {
-  const live = await fetchAuthUser();
+  const live = await fetchSessionUser();
   if (live) return live;
   return readCachedAuthUser();
 }
 
 async function requireAuth(redirect = "/login.html") {
-  const user = await getCurrentUserOptional();
+  const user = await fetchSessionUser();
   if (!user) {
-    window.location.href = redirect;
+    window.location.replace(redirect);
     return null;
   }
-  cacheAuthUser(user);
   return user;
 }
 

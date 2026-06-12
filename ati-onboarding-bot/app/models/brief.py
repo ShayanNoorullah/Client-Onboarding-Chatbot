@@ -5,6 +5,7 @@ from pydantic import Field
 
 
 class Brief(Document):
+    tenant_id: str = "default"
     user_id: Indexed(str)
     session_id: Indexed(str)
     ref_id: Indexed(str)

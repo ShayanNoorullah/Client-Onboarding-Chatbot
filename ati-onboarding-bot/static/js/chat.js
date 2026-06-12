@@ -696,6 +696,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("sidebarToggle")?.addEventListener("click", toggleSidebar);
   document.getElementById("sidebarBackdrop")?.addEventListener("click", closeSidebar);
+  if (typeof SidebarRail !== "undefined") SidebarRail.initSidebarRail();
   document.getElementById("newChatBtn")?.addEventListener("click", () => {
     closeSidebar();
     newSession();

@@ -1,11 +1,12 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat — Client Onboarding Agent</title>
-  <script src="/static/js/theme-bootstrap.js?v=3.6.0"></script>
-  <link href="/static/css/app.css" rel="stylesheet">
+  <script src="/static/js/theme-bootstrap.js?v=3.8.4"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/css/app.css?v=3.8.4" rel="stylesheet">
   <link href="/static/css/theme.css" rel="stylesheet">
   <link href="/static/css/theme-presets.css" rel="stylesheet">
   <link href="/static/css/settings.css" rel="stylesheet">
@@ -16,7 +17,12 @@
   <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
   <div class="chat-layout">
     <aside class="sidebar" id="chatSidebar">
-      <div class="sidebar-brand">Client Onboarding Agent</div>
+      <div class="sidebar-brand-row">
+        <div class="sidebar-brand" title="Client Onboarding Agent">Client Onboarding Agent</div>
+        <button type="button" class="sidebar-rail-btn" data-sidebar-rail-toggle aria-label="Toggle sidebar width" title="Collapse sidebar">
+          <i class="fa fa-angles-left"></i>
+        </button>
+      </div>
       <div class="sidebar-header">
         <button id="newChatBtn" class="btn-new-chat">+ New chat</button>
       </div>
@@ -110,10 +116,11 @@
       <div id="briefFeedback" class="brief-feedback d-none"><p>How was your brief?</p><div class="brief-feedback-actions"><button type="button" data-rating="5">Great</button><button type="button" data-rating="3">OK</button><button type="button" data-rating="1">Poor</button></div></div>
     </main>
   </div>
-  <script src="/static/js/theme.js?v=3.6.0"></script>
-  <script src="/static/js/transitions.js?v=3.6.0"></script>
-  <script src="/static/js/settings.js?v=3.6.0"></script>
-  <script src="/static/js/api.js?v=3.6.0"></script>
-  <script src="/static/js/chat.js?v=3.6.0"></script>
+  <script src="/static/js/theme.js?v=3.8.4"></script>
+  <script src="/static/js/transitions.js?v=3.8.4"></script>
+  <script src="/static/js/settings.js?v=3.8.4"></script>
+  <script src="/static/js/api.js?v=3.8.4"></script>
+  <script src="/static/js/sidebar-rail.js?v=3.8.4"></script>
+  <script src="/static/js/chat.js?v=3.8.4"></script>
 </body>
 </html>

@@ -29,3 +29,13 @@ def decrypt_log(input_path: Path) -> dict:
     """Decrypt and parse a conversation log (.enc or legacy encrypted .json)."""
     f = _get_fernet()
     return json.loads(f.decrypt(input_path.read_bytes()).decode())
+
+
+def encrypt_text(plain: str) -> str:
+    """Encrypt a string and return a Fernet token."""
+    return _get_fernet().encrypt(plain.encode()).decode()
+
+
+def decrypt_text(token: str) -> str:
+    """Decrypt a Fernet token and return the original string."""
+    return _get_fernet().decrypt(token.encode()).decode()

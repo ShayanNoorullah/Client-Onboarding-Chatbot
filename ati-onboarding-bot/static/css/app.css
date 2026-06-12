@@ -120,19 +120,52 @@ body {
 
 .sidebar {
   width: 260px;
+  --sidebar-rail-width: 56px;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   z-index: 200;
+  transition: width 0.2s ease;
+}
+
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 12px 8px 4px 16px;
+}
+
+.sidebar-rail-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sidebar-rail-btn:hover {
+  background: var(--muted);
+  color: var(--on-surface);
 }
 
 .sidebar-brand {
-  padding: 16px 16px 8px;
+  padding: 4px 0 8px;
   font-size: 14px;
   font-weight: 500;
   color: var(--on-surface);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-header { padding: 8px 12px 12px; }
@@ -297,6 +330,85 @@ body {
 }
 
 .sidebar-footer .btn-link-custom:hover { background: var(--muted); }
+
+@media (min-width: 901px) {
+  .sidebar-rail-btn {
+    display: inline-flex;
+  }
+
+  body.sidebar-rail .sidebar {
+    width: var(--sidebar-rail-width);
+  }
+
+  body.sidebar-rail .sidebar-brand {
+    display: none;
+  }
+
+  body.sidebar-rail .sidebar-rail-btn i {
+    transform: rotate(180deg);
+  }
+
+  body.sidebar-rail .sidebar-header,
+  body.sidebar-rail .sidebar-user,
+  body.sidebar-rail .sidebar-search {
+    display: none;
+  }
+
+  body.sidebar-rail .btn-new-chat {
+    font-size: 0;
+    text-align: center;
+    padding: 8px;
+  }
+
+  body.sidebar-rail .btn-new-chat::before {
+    content: "+";
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  body.sidebar-rail .session-label {
+    font-size: 0;
+    text-align: center;
+  }
+
+  body.sidebar-rail .session-label::before {
+    content: "•";
+    font-size: 16px;
+    color: var(--secondary);
+  }
+
+  body.sidebar-rail .session-row.active .session-label::before {
+    color: var(--on-surface);
+  }
+
+  body.sidebar-rail .session-actions {
+    display: none;
+  }
+
+  body.sidebar-rail .session-row {
+    justify-content: center;
+    padding: 6px 4px;
+  }
+
+  body.sidebar-rail .sidebar-footer .btn-link-custom {
+    font-size: 0;
+    text-align: center;
+    padding: 8px 4px;
+  }
+
+  body.sidebar-rail .sidebar-footer .btn-link-custom::before {
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    font-size: 14px;
+  }
+
+  body.sidebar-rail .sidebar-footer a[href="/about.html"]::before { content: "\f05a"; }
+  body.sidebar-rail .sidebar-footer a[href="/contact.html"]::before { content: "\f0e0"; }
+  body.sidebar-rail .sidebar-footer a[href="/privacy.html"]::before { content: "\f132"; }
+  body.sidebar-rail .sidebar-footer #adminLink::before { content: "\f013"; }
+  body.sidebar-rail .sidebar-footer [data-open-settings]::before { content: "\f013"; }
+  body.sidebar-rail .sidebar-footer #logoutBtn::before { content: "\f2f5"; }
+}
 
 /* Main chat area */
 .chat-main {

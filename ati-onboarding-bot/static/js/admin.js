@@ -1,9 +1,24 @@
 const ADMIN_PAGES = {
-  "dashboard.html": { id: "dashboard", title: "Dashboard", load: loadDashboard },
-  "users.html": { id: "users", title: "Users", load: loadUsers },
-  "briefs.html": { id: "briefs", title: "Briefs", load: loadBriefs },
-  "sessions.html": { id: "sessions", title: "Chats", load: loadSessions },
-  "health.html": { id: "health", title: "Health Check", load: loadHealth },
+  "dashboard.html": {
+    id: "dashboard", title: "Dashboard", load: loadDashboard,
+    breadcrumbs: [{ label: "Dashboard" }],
+  },
+  "users.html": {
+    id: "settings-users", title: "Users", load: loadUsers,
+    breadcrumbs: [{ label: "Dashboard", href: "/admin/dashboard.html" }, { label: "Settings" }, { label: "User" }],
+  },
+  "briefs.html": {
+    id: "briefs", title: "Briefs", load: loadBriefs,
+    breadcrumbs: [{ label: "Dashboard", href: "/admin/dashboard.html" }, { label: "Pipeline" }, { label: "Briefs" }],
+  },
+  "sessions.html": {
+    id: "sessions", title: "Onboarding Sessions", load: loadSessions,
+    breadcrumbs: [{ label: "Dashboard", href: "/admin/dashboard.html" }, { label: "Pipeline" }, { label: "Sessions" }],
+  },
+  "health.html": {
+    id: "health", title: "Health Check", load: loadHealth,
+    breadcrumbs: [{ label: "Dashboard", href: "/admin/dashboard.html" }, { label: "Health" }],
+  },
 };
 
 function mountPageTemplate() {
@@ -12,16 +27,43 @@ function mountPageTemplate() {
   if (tpl && target) target.appendChild(tpl.content.cloneNode(true));
 }
 
+let dashboardRefreshTimer = null;
+
 async function loadDashboard() {
-  const data = await API.get("/api/admin/dashboard");
-  document.getElementById("statUsers").textContent = data.total_users;
-  document.getElementById("statActive").textContent = data.active_users_7d;
-  document.getElementById("statSessions").textContent = data.total_sessions;
-  document.getElementById("statBriefs").textContent = data.completed_briefs;
-  document.getElementById("statCompletion").textContent = `${data.completion_rate ?? 0}%`;
-  document.getElementById("statConsent").textContent = `${data.consent_rate ?? 0}%`;
-  document.getElementById("statNewUsers").textContent = data.new_users_7d ?? 0;
-  document.getElementById("statActiveSessions").textContent = data.active_sessions_24h ?? 0;
+  const statIds = [
+    "statUsers", "statActive", "statSessions", "statBriefs",
+    "statCompletion", "statConsent", "statNewUsers", "statActiveSessions",
+    "statSessionsToday", "statBriefs7d", "statRoles", "statSmtp",
+  ];
+  AdminUtils.setStatsLoading(statIds);
+
+  let data;
+  try {
+    data = await API.get("/api/admin/dashboard");
+  } catch (e) {
+    AdminUtils.showToast(AdminUtils.formatApiError(e), "error");
+    statIds.forEach((id) => AdminUtils.setStatValue(id, "-"));
+    return;
+  }
+
+  AdminUtils.setStatValue("statUsers", data.total_users_active ?? data.total_users);
+  AdminUtils.setStatValue("statActive", data.active_users_7d);
+  AdminUtils.setStatValue("statSessions", data.total_sessions);
+  AdminUtils.setStatValue("statBriefs", data.completed_briefs);
+  AdminUtils.setStatValue("statCompletion", `${data.completion_rate ?? 0}%`);
+  AdminUtils.setStatValue("statConsent", `${data.consent_rate ?? 0}%`);
+  AdminUtils.setStatValue("statNewUsers", data.new_users_7d ?? 0);
+  AdminUtils.setStatValue("statActiveSessions", data.active_sessions_24h ?? 0);
+  AdminUtils.setStatValue("statSessionsToday", data.sessions_today ?? 0);
+  AdminUtils.setStatValue("statBriefs7d", data.briefs_7d ?? 0);
+  AdminUtils.setStatValue("statRoles", data.total_roles ?? 0);
+  AdminUtils.setStatValue(
+    "statSmtp",
+    data.smtp_configured
+      ? '<span class="smtp-status-ok">Configured</span>'
+      : '<span class="smtp-status-missing">Not Set</span>',
+    true,
+  );
 
   const roleBody = document.getElementById("roleTable");
   if (roleBody) {
@@ -62,10 +104,13 @@ async function loadDashboard() {
   if (recentBody) {
     recentBody.innerHTML = "";
     (data.recent_sessions || []).forEach((s) => {
+      const userCell = s.user_email
+        ? `<a href="/admin/settings-users.html?search=${encodeURIComponent(s.user_email)}">${s.user_display || s.user_name}</a>`
+        : (s.user_display || "—");
       recentBody.innerHTML += `<tr>
         <td>${s.session_id.slice(0, 8)}…</td>
+        <td>${userCell}</td>
         <td>${s.stage}</td>
-        <td>${s.project_type || "—"}</td>
         <td>${s.done ? "Yes" : "No"}</td>
         <td>${new Date(s.updated_at).toLocaleString()}</td>
       </tr>`;
@@ -186,9 +231,13 @@ async function loadSessions() {
   body.innerHTML = "";
   (data.sessions || []).forEach((s) => {
     const tr = document.createElement("tr");
+    const userLabel = s.user_display || s.user_email || (s.user_id ? `${s.user_id.slice(0, 8)}…` : "—");
+    const userCell = s.user_email
+      ? `<a href="/admin/settings-users.html?search=${encodeURIComponent(s.user_email)}">${userLabel}</a>`
+      : userLabel;
     tr.innerHTML = `
       <td>${s.session_id.slice(0, 8)}…</td>
-      <td>${s.user_id?.slice(0, 8) || "—"}…</td>
+      <td>${userCell}</td>
       <td>${s.display_name || "New chat"}</td>
       <td>${s.stage}</td>
       <td>${s.pinned ? "Yes" : "No"}</td>
@@ -242,13 +291,14 @@ async function deleteSession(id) {
 }
 
 async function loadHealth() {
+  AdminUtils.setStatsLoading(["healthStatus", "healthVersion"]);
   const data = await API.get("/health");
   const statusEl = document.getElementById("healthStatus");
   if (statusEl) {
-    statusEl.textContent = data.status;
+    AdminUtils.setStatValue("healthStatus", data.status);
     statusEl.className = "value " + (data.status === "ok" ? "health-ok" : "health-degraded");
   }
-  document.getElementById("healthVersion").textContent = data.version || "—";
+  AdminUtils.setStatValue("healthVersion", data.version || "—");
 
   const ollama = data.ollama || {};
   const ollamaBody = document.getElementById("ollamaTable");
@@ -270,8 +320,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!user) return;
   currentAdminUser = user;
 
-  initAdminLayout(page.id, page.title);
+  initAdminLayout(page.id, page.title, page.breadcrumbs || []);
   mountPageTemplate();
+
+  if (page.id === "dashboard") {
+    const actions = document.getElementById("adminPageActions");
+    if (actions) {
+      actions.innerHTML = `<button type="button" class="btn btn-outline-secondary btn-sm" id="refreshDashboardBtn"><i class="fa fa-rotate"></i> Refresh</button>`;
+      document.getElementById("refreshDashboardBtn")?.addEventListener("click", () => {
+        loadDashboard().catch((e) => AdminUtils.showToast(AdminUtils.formatApiError(e), "error"));
+      });
+      if (dashboardRefreshTimer) clearInterval(dashboardRefreshTimer);
+      dashboardRefreshTimer = setInterval(() => {
+        if (document.visibilityState === "visible") {
+          loadDashboard().catch(() => {});
+        }
+      }, 60000);
+    }
+  }
 
   const searchEl = document.getElementById("adminSessionSearch");
   if (searchEl) {

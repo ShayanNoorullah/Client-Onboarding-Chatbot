@@ -1,0 +1,60 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Templates — Client Onboarding Agent Admin</title>
+  <script src="/static/js/theme-bootstrap.js?v=3.8.4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/css/app.css" rel="stylesheet">
+  <link href="/static/css/theme.css" rel="stylesheet">
+  <link href="/static/css/theme-presets.css" rel="stylesheet">
+  <link href="/static/css/settings.css" rel="stylesheet">
+    <link href="/static/css/admin-v2.css?v=3.8.4" rel="stylesheet">
+</head>
+<body>
+  <div id="adminRoot" class="admin-layout"></div>
+  <template id="pageTemplate">
+    <div class="data-table-wrapper">
+      <div class="data-table-controls">
+        <span>Automated email templates for onboarding</span>
+        <button type="button" class="btn-admin-primary" id="addTplBtn">Add Template</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead><tr><th>Key</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="tplTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="text-muted mt-2" style="font-size:13px">Variables: {{client_name}}, {{product_name}}, {{session_link}}, {{brief_link}}, {{brief_summary}}, {{stage}}</p>
+  </template>
+  <div class="modal fade" id="tplModal"><div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Email Template</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="mb-2"><label class="form-label">Key</label><input class="form-control" id="tplKey"></div>
+      <div class="mb-2"><label class="form-label">Name</label><input class="form-control" id="tplName"></div>
+      <div class="mb-2"><label class="form-label">Subject</label><input class="form-control" id="tplSubject"></div>
+      <div class="mb-2"><label class="form-label">HTML Body</label><textarea class="form-control" id="tplHtml" rows="5"></textarea></div>
+      <div class="mb-2"><label class="form-label">Text Body</label><textarea class="form-control" id="tplText" rows="3"></textarea></div>
+      <div class="form-check"><input type="checkbox" class="form-check-input" id="tplActive" checked><label class="form-check-label" for="tplActive">Active</label></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn-admin-primary" id="saveTplBtn">Save</button></div>
+  </div></div></div>
+  <div class="modal fade" id="previewModal"><div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Preview</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body" id="previewContent"></div>
+  </div></div></div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/api.js?v=3.8.4"></script>
+  <script src="/static/js/auth.js?v=3.8.4"></script>
+  <script src="/static/js/theme.js?v=3.8.4"></script>
+  <script src="/static/js/settings.js?v=3.8.4"></script>
+  <script src="/static/js/admin-utils.js?v=3.8.4"></script>
+  <script src="/static/js/sidebar-rail.js?v=3.8.4"></script>
+  <script src="/static/js/admin-layout.js?v=3.8.4"></script>
+  <script src="/static/js/admin-shell.js?v=3.8.4"></script>
+  <script src="/static/js/config-email-templates.js?v=3.8.4"></script>
+</body>
+</html>

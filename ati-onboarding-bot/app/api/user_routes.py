@@ -44,10 +44,15 @@ async def update_profile(body: ProfileUpdateRequest, user: User = Depends(get_cu
 
 @router.post("/sessions")
 async def create_session(user: User = Depends(get_current_user)):
-    from app.storage.file_manager import sanitise_name
+    from app.services.usage_service import check_plan_limit
 
-    name = sanitise_name(user.full_name)
-    state = await mongo_session_store.create(str(user.id), user.full_name)
+    allowed, message = await check_plan_limit(user.tenant_id or "default", "sessions")
+    if not allowed:
+        raise HTTPException(status_code=403, detail=message)
+
+    state = await mongo_session_store.create(
+        str(user.id), user.full_name, tenant_id=user.tenant_id or "default"
+    )
     return {"session_id": state["session_id"], "stage": state["stage"]}
 
 

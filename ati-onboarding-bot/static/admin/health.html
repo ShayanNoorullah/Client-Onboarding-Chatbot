@@ -1,44 +1,62 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
   <meta charset="UTF-8">
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Health — ATI Admin</title>
-  <script src="/static/js/theme-bootstrap.js?v=3.6.0"></script>
+
+  <title>Health — Client Onboarding Agent Admin</title>
+
+  <script src="/static/js/theme-bootstrap.js?v=3.8.4"></script>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
   <link href="/static/css/app.css" rel="stylesheet">
+
   <link href="/static/css/theme.css" rel="stylesheet">
+
   <link href="/static/css/theme-presets.css" rel="stylesheet">
+
   <link href="/static/css/settings.css" rel="stylesheet">
-  <link href="/static/css/admin.css" rel="stylesheet">
-  <link href="/static/css/transitions.css" rel="stylesheet">
+
+    <link href="/static/css/admin-v2.css?v=3.8.4" rel="stylesheet">
 </head>
+
 <body>
+
   <div id="adminRoot" class="admin-layout"></div>
+
   <template id="pageTemplate">
-    <div class="admin-stats">
-      <div class="admin-stat-card">
-        <div class="label">Service Status</div>
-        <p class="value" id="healthStatus">—</p>
-      </div>
-      <div class="admin-stat-card">
-        <div class="label">Version</div>
-        <p class="value" id="healthVersion">—</p>
-      </div>
+
+    <div class="admin-stats" style="grid-template-columns:repeat(2,1fr);max-width:480px">
+
+      <div class="admin-stat-card"><div class="label">Service Status</div><p class="value" id="healthStatus"></p></div>
+
+      <div class="admin-stat-card"><div class="label">Version</div><p class="value" id="healthVersion"></p></div>
+
     </div>
-    <div class="admin-card">
-      <h6>Ollama</h6>
-      <table class="admin-table"><tbody id="ollamaTable"></tbody></table>
-    </div>
-    <div class="admin-card">
-      <h6>Raw Response</h6>
-      <pre id="healthRaw" style="font-size:12px;overflow:auto;margin:0;"></pre>
-    </div>
+
+    <div class="admin-card"><h6>Ollama</h6><table class="admin-table"><tbody id="ollamaTable"></tbody></table></div>
+
+    <div class="admin-card"><h6>Raw Response</h6><pre id="healthRaw" class="small overflow-auto m-0"></pre></div>
+
   </template>
-  <script src="/static/js/theme.js?v=3.6.0"></script>
-  <script src="/static/js/transitions.js?v=3.6.0"></script>
-  <script src="/static/js/settings.js?v=3.6.0"></script>
-  <script src="/static/js/api.js?v=3.6.0"></script>
-  <script src="/static/js/admin-layout.js?v=3.6.0"></script>
-  <script src="/static/js/admin.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/api.js?v=3.8.4"></script>
+  <script src="/static/js/auth.js?v=3.8.4"></script>
+  <script src="/static/js/theme.js?v=3.8.4"></script>
+  <script src="/static/js/settings.js?v=3.8.4"></script>
+  <script src="/static/js/admin-utils.js?v=3.8.4"></script>
+  <script src="/static/js/sidebar-rail.js?v=3.8.4"></script>
+  <script src="/static/js/admin-layout.js?v=3.8.4"></script>
+  <script src="/static/js/admin-shell.js?v=3.8.4"></script>
+  <script src="/static/js/admin.js?v=3.8.4"></script>
 </body>
+
 </html>
+

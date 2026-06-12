@@ -1,8 +1,8 @@
 # ATI Client Onboarding AI Chatbot — Implementation Reference
 
-**Version:** 3.0.0  
+**Version:** 3.2.0  
 **Project path:** `ati-onboarding-bot/`  
-**Purpose:** AI-powered client onboarding for Awesome Technologies Inc. (ATI). Gathers project requirements through conversation, accepts file uploads, and generates structured client briefs — **100% local, no paid API keys**.
+**Purpose:** AI-powered client onboarding for Awesome Technologies Inc. (ATI). Gathers project requirements through conversation, accepts file uploads, and generates structured client briefs — **100% local, no paid API keys**. Includes a multi-tenant **admin platform** with RBAC, SaaS workspace settings, and runtime AI/system configuration.
 
 ---
 
@@ -26,7 +26,11 @@
 16. [Scripts & Operations](#16-scripts--operations)
 17. [Testing](#17-testing)
 18. [Evolution & Bug Fixes](#18-evolution--bug-fixes)
-19. [Roadmap](#19-roadmap)
+19. [v3 Architecture (Auth, MongoDB, Bootstrap UI)](#19-v3-architecture-auth-mongodb-bootstrap-ui)
+20. [v3.1 Architecture (UI, Quality, Learning)](#20-v31-architecture-ui-quality-learning)
+21. [v3.2 Admin Platform & RBAC](#21-v32-admin-platform--rbac)
+22. [v3.8 Admin UX & SaaS Settings](#22-v38-admin-ux--saas-settings)
+23. [Roadmap](#23-roadmap)
 
 ---
 
@@ -59,7 +63,8 @@ Additional AI capabilities:
 - **Project-type-aware RAG** — mobile app selections retrieve mobile KB sections, not mortgage content.
 - **Bootstrap HTML/JS UI** — ChatGPT-style sidebar chat; React `frontend/` deprecated.
 - **Login-first auth** — JWT httpOnly cookies; email/password + Google OAuth.
-- **MongoDB Atlas** — users, sessions, briefs metadata; ChromaDB + files stay on local disk.
+- **MongoDB Atlas** — users, sessions, briefs, roles, tenants, audit, config; ChromaDB + files stay on local disk.
+- **Admin platform (v3.2)** — dashboard KPIs, RBAC (modules/pages/actions/roles), AI vs system config split, SaaS workspace (API keys, usage, audit).
 
 ---
 
@@ -528,7 +533,8 @@ GET /health → { "status": "ok"|"degraded", "ollama": { ... } }
 | `openpyxl` | XLSX parsing |
 | `Pillow` | Image handling |
 | `cryptography` | Fernet encryption for conversation logs |
-| `pytest` | Unit tests (32 tests) |
+| `pytest` | Unit and integration tests (98 tests) |
+| `motor` + `beanie` | Async MongoDB ODM |
 
 ### Frontend
 
@@ -553,84 +559,50 @@ GET /health → { "status": "ok"|"degraded", "ollama": { ... } }
 
 ```
 ati-onboarding-bot/
-├── main.py                    # FastAPI entry, serves frontend/dist, /health
+├── main.py                    # FastAPI 3.2.0 entry, routers, /health, static mount
 ├── requirements.txt
 ├── .env / .env.example
 ├── README.md
-├── IMPLEMENTATION.md            # This file
-├── Run.txt                      # Quick start commands
+├── IMPLEMENTATION.md          # This file
+├── Run.txt                    # Quick start commands
 │
 ├── app/
-│   ├── config.py                # Settings from environment variables
+│   ├── config.py              # Environment settings
 │   ├── api/
-│   │   └── routes.py            # WebSocket, upload, client CRUD endpoints
-│   ├── agent/
-│   │   ├── graph.py             # LangGraph definition + process_message
-│   │   ├── nodes.py             # 6 stage nodes (greeting → summarise)
-│   │   ├── routing.py           # Stage transitions, consent/done detection
-│   │   ├── task_router.py       # SLM vs rules, project types, suggestions
-│   │   ├── prompts.py           # System prompts, SLM prompts, summary JSON
-│   │   └── state.py             # OnboardingState TypedDict
-│   ├── llm/
-│   │   └── factory.py           # Ollama chat, embeddings, vision, health
-│   ├── rag/
-│   │   ├── embedder.py          # Chunk + embed into ChromaDB
-│   │   └── retriever.py         # Query ATI KB + per-client vectors
-│   ├── processors/
-│   │   ├── file_router.py       # Route files to correct processor
-│   │   ├── pdf_processor.py
-│   │   ├── docx_processor.py
-│   │   └── image_processor.py   # Ollama llava vision
-│   └── storage/
-│       ├── file_manager.py      # Client folders, sanitise names, assets
-│       ├── session_store.py     # In-memory session state per WebSocket ID
-│       ├── summary_writer.py    # Generate summary.md brief
-│       └── encryptor.py         # Fernet encrypt conversation logs
+│   │   ├── routes.py          # WebSocket, upload
+│   │   ├── auth_routes.py     # Register, login, Google OAuth, JWT cookies
+│   │   ├── user_routes.py     # Profile, preferences, sessions, briefs
+│   │   ├── admin_routes.py    # Dashboard, users, sessions, briefs, reports
+│   │   ├── config_routes.py   # AI config, system config, SMTP, templates, follow-up
+│   │   ├── settings_routes.py # RBAC: roles, users, modules, pages, actions
+│   │   ├── tenant_routes.py   # Workspace, API keys, usage (multi-tenant)
+│   │   ├── audit_routes.py    # Audit log query
+│   │   ├── brief_routes.py    # Brief download, feedback
+│   │   └── schemas.py         # Pydantic request/response models
+│   ├── agent/                 # LangGraph pipeline (6 stages)
+│   ├── auth/                  # JWT, passwords, dependencies, Google OAuth
+│   ├── db/
+│   │   ├── mongodb.py         # Motor connection, Beanie init
+│   │   └── seeders.py         # Admin user, roles, modules, pages, actions
+│   ├── llm/factory.py         # Ollama chat, embeddings, vision, health
+│   ├── middleware/tenant.py   # Tenant resolution middleware
+│   ├── models/                # Beanie documents (User, Role, Tenant, Brief, …)
+│   ├── processors/            # PDF, DOCX, image, file router
+│   ├── rag/                   # ChromaDB embed + retrieve
+│   ├── services/              # brief, email, audit, usage, AI/system config, metrics
+│   └── storage/               # file_manager, mongo_session_store, encryptor, summary_writer
 │
-├── ati_kb/
-│   ├── privacy_policy.txt       # ATI privacy policy text
-│   ├── service_catalogue.txt    # ATI services (mobile, web, mortgage, etc.)
-│   └── vectors/                 # ChromaDB index (generated by init_kb.py)
+├── static/                    # v3 Bootstrap UI (primary)
+│   ├── login.html, chat.html, register.html
+│   ├── admin/                 # 25 admin pages (dashboard, config-*, settings-*)
+│   ├── css/admin-v2.css       # Admin shell, tables, action buttons
+│   └── js/                    # admin-layout.js, settings-*.js, config-*.js, sidebar-rail.js
 │
-├── client_data/                 # Per-client workspaces (runtime data)
-│   └── {ClientName}/
-│       ├── assets/
-│       ├── vectors/
-│       ├── summary.md
-│       └── conversation_log.json
-│
-├── frontend/                    # React/Vite SPA
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   ├── hooks/useWebSocket.ts
-│   │   ├── components/
-│   │   │   ├── ChatLayout.tsx
-│   │   │   ├── ProgressStepper.tsx
-│   │   │   ├── QuickReplies.tsx
-│   │   │   ├── ConsentCard.tsx
-│   │   │   ├── FileUploadZone.tsx
-│   │   │   ├── MessageBubble.tsx
-│   │   │   └── TypingIndicator.tsx
-│   │   ├── types/chat.ts
-│   │   └── lib/api.ts
-│   ├── dist/                    # Production build (served by FastAPI)
-│   └── vite.config.ts           # Dev proxy to :8001
-│
-├── scripts/
-│   ├── init_kb.py               # Index ati_kb into ChromaDB
-│   └── check_ollama.py          # Verify Ollama + model warmup
-│
-├── static/
-│   └── index.html               # Legacy vanilla UI (fallback)
-│
-└── tests/                       # 32 unit tests
-    ├── test_encryptor.py
-    ├── test_file_manager.py
-    ├── test_processors.py
-    ├── test_rag.py
-    ├── test_summary_writer.py
-    └── test_task_router.py
+├── ati_kb/                    # Knowledge base + ChromaDB vectors
+├── client_data/               # Per-client workspaces (runtime)
+├── frontend/                  # React/Vite SPA (deprecated)
+├── scripts/                   # init_kb.py, check_ollama.py, …
+└── tests/                     # 98 pytest tests
 ```
 
 ---
@@ -668,10 +640,11 @@ Hard-coded limits (`app/config.py`):
 
 ### `main.py`
 
-- Creates FastAPI app v2.0.0
-- Mounts API router from `app/api/routes.py`
-- **`GET /health`** — returns Ollama connectivity, installed models, missing models, overall `ok` or `degraded` status
-- Serves `frontend/dist` as static SPA when built; falls back to `static/` legacy HTML
+- Creates FastAPI app **v3.2.0** with lifespan hooks (MongoDB connect, seed admin, warm config caches, follow-up scheduler)
+- Registers routers: auth, user, admin, settings, config, tenant, audit, brief, public, chat
+- Adds `TenantMiddleware` and `SessionMiddleware`
+- **`GET /health`** — Ollama connectivity, installed models, service version
+- Serves `static/` Bootstrap UI at `/` (React `frontend/` deprecated)
 
 ### `app/api/routes.py`
 
@@ -924,12 +897,25 @@ Generated `summary.md` sections:
 
 ---
 
-## 14. Frontend — React/Vite SPA
+## 14. Frontend
 
-### Build & serve
+### Primary UI — Bootstrap HTML/JS (`static/`)
 
-- **Production:** `npm run build` → `frontend/dist/` served by FastAPI at `/`
-- **Development:** `npm run dev` on port 5173, proxies `/ws`, `/upload`, `/client`, `/health` to `:8001`
+v3.2 serves `static/` as the primary UI from FastAPI (`main.py` mounts `/static` and `/`).
+
+| Area | Key files |
+|------|-----------|
+| **Auth** | `login.html`, `register.html` |
+| **Chat** | `chat.html`, `static/js/chat.js` — sidebar sessions, WebSocket, uploads |
+| **Admin** | `static/admin/*.html`, `admin-layout.js`, `admin-v2.css` |
+| **Theme** | `theme.css`, `theme-presets.css`, `theme-bootstrap.js` |
+
+### Deprecated — React/Vite SPA (`frontend/`)
+
+Retained for reference; not used in production v3.
+
+- **Production (legacy):** `npm run build` → `frontend/dist/`
+- **Development:** `npm run dev` on port 5173, proxies `/ws`, `/upload`, `/health` to `:8001`
 
 ### Components
 
@@ -1017,17 +1003,14 @@ Generated `summary.md` sections:
 
 ### `Run.txt`
 
-Quick reference for starting backend (port 8001) and frontend dev server (port 5173).
+Quick reference for starting the backend (port 8001) with `--reload`, admin URLs, tests, and KB re-index commands.
 
 ### Typical commands
 
 ```powershell
-# Backend
+# Backend (development)
 .venv\Scripts\activate
-uvicorn main:app --host 127.0.0.1 --port 8001
-
-# Frontend dev
-cd frontend && npm run dev
+uvicorn main:app --host 127.0.0.1 --port 8001 --reload
 
 # Tests
 pytest tests/ -v
@@ -1037,11 +1020,13 @@ Remove-Item -Recurse -Force ati_kb\vectors
 python scripts/init_kb.py
 ```
 
+Admin: `http://127.0.0.1:8001/admin/dashboard.html`
+
 ---
 
 ## 17. Testing
 
-**32 unit tests** across 6 test files:
+**98 tests** across agent, auth, admin, config, settings, and storage modules.
 
 | File | Coverage |
 |------|----------|
@@ -1050,7 +1035,26 @@ python scripts/init_kb.py
 | `test_processors.py` | File type routing, TXT/CSV/DOCX/PDF |
 | `test_rag.py` | Embedding, RAG query, mobile app retrieval |
 | `test_summary_writer.py` | Brief markdown generation |
-| `test_task_router.py` | SLM/rules routing, project type normalization, contextual suggestions |
+| `test_task_router.py` | SLM/rules routing, project types, suggestions |
+| `test_auth.py` | Registration, login, JWT |
+| `test_readiness.py` | Completion detection, readiness gates |
+| `test_consent.py` | SLM consent classifier |
+| `test_admin_dashboard.py` | Dashboard KPI aggregation |
+| `test_config_routes.py` | AI and system config API |
+| `test_ai_config.py` | AiConfig model, per-purpose model selection |
+| `test_system_config.py` | SystemConfig service |
+| `test_settings_routes.py` | Roles CRUD |
+| `test_settings_actions.py` | Application actions API |
+| `test_tenant_scoping.py` | Tenant isolation |
+| `test_workspace.py` | Workspace slug sanitisation |
+| `test_brief_export.py` | Markdown → PDF/plain text export |
+| `test_email_templates.py` | Template CRUD |
+| `test_smtp_config.py` | SMTP configuration |
+| `test_seeders.py` | Default roles, modules, permissions |
+| `test_session_metadata.py` | Session enrichment fields |
+| `test_user_preferences.py` | User preference updates |
+| `test_pipeline_types.py` | Project type admin API |
+| `test_term_glossary.py` | Term expansions |
 
 Run: `pytest tests/ -v`
 
@@ -1143,7 +1147,7 @@ Run: `pytest tests/ -v`
 
 | Area | Implementation |
 |------|----------------|
-| **Admin UI** | `static/css/admin.css`, `admin-layout.js` — white sidebar; pages: dashboard, users, briefs, sessions, health |
+| **Admin UI** | `admin-layout.js`, `admin-v2.css` — sidebar nav, dashboard, sessions, briefs (expanded in v3.2/v3.8) |
 | **Public pages** | `about.html`, `contact.html` linked from login/chat/admin |
 | **Chroma** | `langchain-chroma` package (replaces deprecated `langchain_community.vectorstores.Chroma`) |
 | **Readiness** | Stricter gates: 5+ turns, 6/7 substantive fields, SLM `complete=true` required for auto-brief |
@@ -1154,15 +1158,153 @@ Run: `pytest tests/ -v`
 
 ---
 
-## 21. Roadmap
+## 21. v3.2 Admin Platform & RBAC
+
+### Settings API (`app/api/settings_routes.py`)
+
+Mounted at `/api/admin/settings`. Manages the permission model used by admin pages.
+
+| Resource | Endpoints | Notes |
+|----------|-----------|-------|
+| **Roles** | `GET/POST /roles`, `GET/PUT/DELETE /roles/{id}` | Nested `permissions` map: `{module → page → action → bool}` |
+| **Users** | `GET/POST /users`, `GET/PUT/PATCH/DELETE /users/{id}` | Assign `role_name`; tenant-scoped |
+| **Modules** | `GET/POST /modules`, `PUT/DELETE /modules/{id}` | Top-level nav groups (Pipeline, Configuration, Settings) |
+| **Pages** | `GET/POST /pages`, `PUT/DELETE /pages/{id}` | Admin pages linked to modules |
+| **Actions** | `GET/POST /actions`, `PUT/PATCH/DELETE /actions/{id}` | Per-page action keys; `sort_order`, `is_pinned`; list `limit` max **200** |
+
+Default roles (`Super Admin`, `Admin`) are seeded in `app/db/seeders.py` with `sort_order` (Super Admin first) and full permission matrices for all seeded modules/pages/actions.
+
+### Role permission UI (`static/js/settings-roles.js`)
+
+- **Add / Edit Role** opens a Bootstrap modal (`#roleModal`) with name, description, active flag, and a tabbed permission matrix
+- Matrix columns are driven by **Application Action** records for each page (falls back to view/insert/update/delete)
+- Presets: **View only**, **Full access**, **Clear all**
+- Column **select-all** checkboxes per module tab
+- Permissions saved on both create (`POST /roles`) and update (`PUT /roles/{id}`)
+
+### Application Action UI (`static/js/settings-actions.js`)
+
+- Search, pagination, pin/unpin (`is_pinned`), `sort_order` editing
+- Delete button uses `action-btn-danger` (white text on red background)
+
+### Config API (`app/api/config_routes.py`)
+
+Mounted at `/api/admin/config`. Split into runtime-managed documents:
+
+| Config | Endpoints | Model |
+|--------|-----------|-------|
+| **AI** | `GET/PUT /ai`, `POST /ai/test-ollama`, `GET /ai/ollama-models` | `AiConfig` — per-purpose Ollama model, temperature, base URL |
+| **System** | `GET/PUT /system` | `SystemConfig` — app name, support contacts, feature flags |
+| **SMTP** | `GET/PUT /smtp`, `POST /smtp/test` | `SmtpConfig` |
+| **Email templates** | CRUD `/email-templates`, preview | `EmailTemplate` |
+| **Follow-up** | `GET/PUT /follow-up-rules` | `FollowUpRule` |
+
+Caches warmed on startup via `warm_ai_config_cache()` and `warm_config_cache()`.
+
+### Tenant / SaaS API (`app/api/tenant_routes.py`)
+
+Mounted at `/api/admin/tenants`. Super-admin can list/create tenants; tenant admins manage their workspace.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET/PATCH /current` | Workspace profile (name, slug, limits) |
+| `GET /usage` | Session/brief/user counts vs plan limits |
+| `GET/POST /api-keys`, `DELETE /api-keys/{id}` | Hashed API key management |
+| `GET /tenants` (super-admin) | List all tenants |
+
+`TenantMiddleware` resolves tenant from user/session context. Dashboard and list endpoints filter by `tenant_id`.
+
+### Audit (`app/api/audit_routes.py`)
+
+`GET /api/admin/audit` — paginated audit events (user actions, config changes) via `audit_service.py`.
+
+### Admin shell
+
+- `static/js/admin-layout.js` — nav tree (Dashboard, Pipeline, Configuration, Settings, Reports)
+- `static/js/sidebar-rail.js` — collapsible icon rail on desktop
+- `static/css/admin-v2.css` — tables, pagination, stat cards, pulse loaders, action buttons
+- Static assets cache-busted at `?v=3.8.5`
+
+---
+
+## 22. v3.8 Admin UX & SaaS Settings
+
+### Dashboard improvements (`GET /api/admin/dashboard`)
+
+| Metric | Description |
+|--------|-------------|
+| `avg_turns_to_brief` | Average conversation turns from session start to brief completion |
+| `active_users_7d` | Users with `last_login` in the past 7 days |
+| `agent_metrics` | In-process agent timing/error summary from `agent_metrics.py` |
+| `sessions_by_stage` | Funnel including `completed` bucket |
+| `ollama` | Tenant-scoped Ollama health via `check_ollama_health(tenant_id)` |
+
+Frontend (`static/js/admin.js`): manual refresh, 60-second auto-refresh, error toasts via `formatApiError()`.
+
+### Sessions admin UX
+
+- Search input left-aligned in table controls
+- API enriches sessions with `user_name`, `user_email`, `user_display` for the User column
+
+### AI Configuration hardening
+
+- Permission rows for AI config page seeded/migrated in `seeders.py`
+- `config-ai.js` uses `formatApiError()` for clearer 404/permission errors
+- Run uvicorn with `--reload` during development (see `Run.txt`)
+
+### Bug fixes (v3.8.5)
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Roles table empty on first load | `settings-roles.js` requested `actions?limit=500`; API max is 200 → 422 aborted init before `loadRoles()` | Use `limit=200`; isolate actions fetch in try/catch |
+| Empty permission matrix on Add Role | Same failed actions fetch left `actionsCache` empty | Resilient `loadModulesAndPages()`; modal shows matrix after modules load |
+| Red delete text on action buttons | Bootstrap `text-danger` overrode `action-btn` white label | `.action-btn-danger` class with white text |
+
+### Admin pages (complete list)
+
+| Page | Path |
+|------|------|
+| Dashboard | `/admin/dashboard.html` |
+| Sessions | `/admin/sessions.html` |
+| Briefs | `/admin/briefs.html` |
+| Project Types | `/admin/pipeline-types.html` |
+| AI Configuration | `/admin/config-ai.html` |
+| System Configuration | `/admin/config-system.html` |
+| SMTP | `/admin/config-smtp.html` |
+| Email Templates | `/admin/config-email-templates.html` |
+| Follow-up Timing | `/admin/config-followup.html` |
+| Workspace | `/admin/config-tenant.html` |
+| API Keys | `/admin/config-api-keys.html` |
+| Usage & Limits | `/admin/config-usage.html` |
+| Application Action | `/admin/settings-actions.html` |
+| Application Module | `/admin/settings-modules.html` |
+| Application Page | `/admin/settings-pages.html` |
+| Role | `/admin/settings-roles.html` |
+| User | `/admin/settings-users.html` |
+| Audit Log | `/admin/settings-audit.html` |
+| Reports | `/admin/reports.html` |
+| Health | `/admin/health.html` |
+
+---
+
+## 23. Roadmap
 
 Recommended next steps (not yet implemented):
 
-1. **Brief PDF export** — generate PDF from markdown brief
-2. **KB maintenance workflow** — `scripts/reindex_kb.py` wrapper; CI warning when KB source changes but vectors are stale
-3. **Split KB files** — `mobile_apps.txt`, `integrations.txt`, etc. for cleaner chunking
-4. **SLM upgrade** — Test `qwen2.5:7b` for requirements stage if 3B model drifts
-5. **Production deployment** — Docker + Ollama sidecar, HTTPS reverse proxy, staging/production KB versions
+1. **KB maintenance workflow** — `scripts/reindex_kb.py` wrapper; CI warning when KB source changes but vectors are stale
+2. **Split KB files** — `mobile_apps.txt`, `integrations.txt`, etc. for cleaner chunking
+3. **SLM upgrade** — Test `qwen2.5:7b` for requirements stage if 3B model drifts
+4. **Production deployment** — Docker + Ollama sidecar, HTTPS reverse proxy, staging/production KB versions
+5. **Notification system** — Email alerts to management on new brief requests; client acknowledgement (see `Run.txt` product notes)
+6. **Enforce RBAC at API layer** — Permission checks on admin routes beyond page-level UI gating
+
+**Recently completed (moved from roadmap):**
+
+- Brief PDF/plain-text export (`app/services/brief_export.py`)
+- AI vs system config split (`AiConfig`, `SystemConfig`)
+- SaaS workspace pages (tenant, API keys, usage, audit)
+- Role permission matrix with configurable application actions
+- Dashboard accuracy fixes and agent metrics card
 
 ---
 

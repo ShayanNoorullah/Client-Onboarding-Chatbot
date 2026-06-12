@@ -217,24 +217,6 @@ body.settings-open {
   cursor: pointer;
 }
 
-.admin-sidebar-footer [data-open-settings] {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 8px 12px;
-  font-size: 14px;
-  color: var(--on-surface);
-  border-radius: 8px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.admin-sidebar-footer [data-open-settings]:hover {
-  background: var(--muted);
-}
-
 .theme-preset-grid {
   display: flex;
   flex-wrap: wrap;

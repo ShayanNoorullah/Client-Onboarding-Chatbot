@@ -8,6 +8,14 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.admin_routes import router as admin_router
 from app.api.auth_routes import router as auth_router
+from app.api.config_routes import router as config_router
+from app.api.settings_routes import router as settings_router
+from app.api.audit_routes import router as audit_router
+from app.api.tenant_routes import router as tenant_router
+from app.middleware.tenant import TenantMiddleware
+from app.services.follow_up_scheduler import start_follow_up_scheduler
+from app.services.ai_config_service import warm_ai_config_cache
+from app.services.system_config_service import warm_config_cache
 from app.api.brief_routes import router as brief_router
 from app.api.public_routes import router as public_router
 from app.api.routes import router as chat_router
@@ -24,16 +32,24 @@ logging.basicConfig(level=_log_level, format="%(levelname)s %(name)s: %(message)
 async def lifespan(app: FastAPI):
     await connect_mongodb()
     await seed_admin_user()
+    await warm_config_cache("default")
+    await warm_ai_config_cache("default")
+    start_follow_up_scheduler()
     yield
     await close_mongodb()
 
 
 app = FastAPI(title="Client Onboarding Agent", version="3.2.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET_KEY)
+app.add_middleware(TenantMiddleware)
 
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(admin_router)
+app.include_router(settings_router, prefix="/api/admin")
+app.include_router(config_router, prefix="/api/admin")
+app.include_router(tenant_router)
+app.include_router(audit_router)
 app.include_router(brief_router)
 app.include_router(public_router)
 app.include_router(chat_router)

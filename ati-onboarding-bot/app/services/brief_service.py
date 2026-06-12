@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
 from app.models.brief import Brief
+from app.models.user import User
+from app.services.email_service import send_templated_email
 from app.storage.file_manager import get_summary_path
 
 
@@ -38,7 +40,9 @@ async def persist_brief_to_mongo(state: dict) -> str | None:
             await brief.save()
             return str(brief.id)
 
+    tenant_id = state.get("tenant_id", "default")
     brief = Brief(
+        tenant_id=tenant_id,
         user_id=state["user_id"],
         session_id=state.get("session_id", ""),
         ref_id=ref_id,
@@ -49,4 +53,19 @@ async def persist_brief_to_mongo(state: dict) -> str | None:
         version=version,
     )
     await brief.insert()
+
+    user = await User.get(state["user_id"])
+    if user and user.email:
+        summary_preview = markdown[:500] if markdown else ""
+        await send_templated_email(
+            tenant_id=tenant_id,
+            template_key="brief_ready",
+            to_email=user.email,
+            variables={
+                "client_name": client_name,
+                "brief_link": f"/api/briefs/{brief.id}/download",
+                "brief_summary": summary_preview,
+            },
+        )
+
     return str(brief.id)

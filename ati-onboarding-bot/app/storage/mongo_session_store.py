@@ -14,7 +14,9 @@ class MongoSessionStore:
     def __init__(self) -> None:
         self._cache: dict[str, dict[str, Any]] = {}
 
-    async def create(self, user_id: str, full_name: str | None = None) -> dict[str, Any]:
+    async def create(
+        self, user_id: str, full_name: str | None = None, tenant_id: str = "default"
+    ) -> dict[str, Any]:
         from app.storage.file_manager import sanitise_name
 
         session_id = str(uuid.uuid4())
@@ -24,6 +26,7 @@ class MongoSessionStore:
         if full_name:
             state["client_name"] = sanitise_name(full_name)
         doc = OnboardingSessionDoc(
+            tenant_id=tenant_id,
             user_id=user_id,
             session_id=session_id,
             stage=state["stage"],

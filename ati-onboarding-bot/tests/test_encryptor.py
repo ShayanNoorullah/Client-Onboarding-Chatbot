@@ -3,7 +3,7 @@ import json
 import pytest
 from cryptography.fernet import Fernet
 
-from app.storage.encryptor import decrypt_log, encrypt_log, get_encrypted_log_path
+from app.storage.encryptor import decrypt_log, decrypt_text, encrypt_log, encrypt_text, get_encrypted_log_path
 from app.storage.file_manager import write_conversation_log
 
 
@@ -67,6 +67,12 @@ def test_encrypt_decrypt_roundtrip(tmp_path, encryption_key):
     assert decrypted["session_id"] == "test-123"
     assert decrypted["client_name"] == "Sarah_Johnson"
     assert len(decrypted["messages"]) == 2
+
+
+def test_encrypt_text_roundtrip(encryption_key):
+    token = encrypt_text("smtp-secret")
+    assert token != "smtp-secret"
+    assert decrypt_text(token) == "smtp-secret"
 
 
 def test_missing_encryption_key_raises(tmp_path, monkeypatch):

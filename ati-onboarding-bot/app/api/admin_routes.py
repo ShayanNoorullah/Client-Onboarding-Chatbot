@@ -1,13 +1,20 @@
+import csv
+import io
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.schemas import AdminUserCreate, AdminUserUpdate, SessionUpdateRequest
-from app.auth.dependencies import require_admin
+from app.auth.dependencies import require_admin, require_permission
+from app.auth.tenant_context import get_user_tenant_id
 from app.auth.passwords import hash_password
 from app.llm.factory import check_ollama_health
+from app.models.app_module import ApplicationModule
 from app.models.brief import Brief
 from app.models.onboarding_session import OnboardingSessionDoc
+from app.models.role import Role
+from app.models.smtp_config import SmtpConfig
 from app.models.user import User
 from app.storage.file_manager import delete_client_data
 from app.services.agent_metrics import metrics
@@ -16,40 +23,156 @@ from app.storage.mongo_session_store import mongo_session_store
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-def _avg_turns_to_brief(done_sessions: int, total_sessions: int) -> float:
-    if not done_sessions:
+def _tenant_id(user: User, request: Request) -> str:
+    return get_user_tenant_id(user, request)
+
+
+def _avg_turns_to_brief() -> float:
+    if not metrics.sessions_completed:
         return 0.0
-    return round(total_sessions / done_sessions, 1)
+    return round(metrics.total_turns / metrics.sessions_completed, 1)
+
+
+async def _enrich_session_summaries(sessions: list) -> list[dict]:
+    user_ids = list({s.user_id for s in sessions if s.user_id})
+    users_by_id: dict[str, User] = {}
+    for uid in user_ids:
+        try:
+            user = await User.get(uid)
+            if user:
+                users_by_id[uid] = user
+        except Exception:
+            continue
+    enriched = []
+    for session in sessions:
+        summary = session.to_summary()
+        user = users_by_id.get(session.user_id or "")
+        if user:
+            summary["user_name"] = user.full_name
+            summary["user_email"] = user.email
+            summary["user_display"] = f"{user.full_name} ({user.email})"
+        else:
+            short_id = (session.user_id or "")[:8]
+            summary["user_name"] = None
+            summary["user_email"] = None
+            summary["user_display"] = f"{short_id}…" if short_id else "—"
+        enriched.append(summary)
+    return enriched
+
+
+@router.get("/pipeline/project-types")
+async def pipeline_project_types(
+    request: Request,
+    admin: User = Depends(require_admin),
+):
+    tenant_id = _tenant_id(admin, request)
+    pipeline = [
+        {"$match": {"tenant_id": tenant_id}},
+        {
+            "$group": {
+                "_id": {"$ifNull": ["$project_type", "unknown"]},
+                "total": {"$sum": 1},
+                "completed": {"$sum": {"$cond": ["$done", 1, 0]}},
+                "in_progress": {
+                    "$sum": {
+                        "$cond": [
+                            {"$and": [{"$not": "$done"}, {"$ne": ["$stage", "greeting"]}]},
+                            1,
+                            0,
+                        ]
+                    }
+                },
+                "last_activity": {"$max": "$updated_at"},
+            }
+        },
+        {"$sort": {"total": -1}},
+    ]
+    rows = await OnboardingSessionDoc.aggregate(pipeline).to_list()
+    summary_pipeline = [
+        {"$match": {"tenant_id": tenant_id}},
+        {
+            "$group": {
+                "_id": None,
+                "total": {"$sum": 1},
+                "completed": {"$sum": {"$cond": ["$done", 1, 0]}},
+                "in_progress": {
+                    "$sum": {
+                        "$cond": [
+                            {"$and": [{"$not": "$done"}, {"$ne": ["$stage", "greeting"]}]},
+                            1,
+                            0,
+                        ]
+                    }
+                },
+            }
+        },
+    ]
+    summary_rows = await OnboardingSessionDoc.aggregate(summary_pipeline).to_list()
+    summary = summary_rows[0] if summary_rows else {"total": 0, "completed": 0, "in_progress": 0}
+    abandoned = max(0, summary.get("total", 0) - summary.get("completed", 0) - summary.get("in_progress", 0))
+    return {
+        "summary": {
+            "total": summary.get("total", 0),
+            "completed": summary.get("completed", 0),
+            "in_progress": summary.get("in_progress", 0),
+            "abandoned": abandoned,
+        },
+        "project_types": [
+            {
+                "project_type": row["_id"],
+                "total": row["total"],
+                "completed": row["completed"],
+                "in_progress": row["in_progress"],
+                "last_activity": row["last_activity"].isoformat() if row.get("last_activity") else None,
+            }
+            for row in rows
+        ],
+    }
 
 
 @router.get("/dashboard")
-async def dashboard(_: User = Depends(require_admin)):
+async def dashboard(request: Request, admin: User = Depends(require_admin)):
+    tenant_id = _tenant_id(admin, request)
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
     day_ago = now - timedelta(hours=24)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    total_users = await User.count()
-    active_users = await User.find(User.last_login >= week_ago).count()
-    new_users_7d = await User.find(User.created_at >= week_ago).count()
-    total_sessions = await OnboardingSessionDoc.count()
-    completed_briefs = await Brief.count()
+    total_users = await User.find(User.tenant_id == tenant_id).count()
+    total_users_active = await User.find(
+        User.tenant_id == tenant_id, User.is_active == True
+    ).count()
+    active_users = await User.find(User.tenant_id == tenant_id, User.last_login >= week_ago).count()
+    new_users_7d = await User.find(User.tenant_id == tenant_id, User.created_at >= week_ago).count()
+    total_sessions = await OnboardingSessionDoc.find(OnboardingSessionDoc.tenant_id == tenant_id).count()
+    completed_briefs = await Brief.find(Brief.tenant_id == tenant_id).count()
     new_sessions_7d = await OnboardingSessionDoc.find(
-        OnboardingSessionDoc.created_at >= week_ago
+        OnboardingSessionDoc.tenant_id == tenant_id,
+        OnboardingSessionDoc.created_at >= week_ago,
     ).count()
     sessions_today = await OnboardingSessionDoc.find(
-        OnboardingSessionDoc.created_at >= today_start
+        OnboardingSessionDoc.tenant_id == tenant_id,
+        OnboardingSessionDoc.created_at >= today_start,
     ).count()
-    briefs_7d = await Brief.find(Brief.created_at >= week_ago).count()
-    done_sessions = await OnboardingSessionDoc.find(OnboardingSessionDoc.done == True).count()
+    briefs_7d = await Brief.find(Brief.tenant_id == tenant_id, Brief.created_at >= week_ago).count()
+    done_sessions = await OnboardingSessionDoc.find(
+        OnboardingSessionDoc.tenant_id == tenant_id,
+        OnboardingSessionDoc.done == True,
+    ).count()
     consent_sessions = await OnboardingSessionDoc.find(
-        OnboardingSessionDoc.consent_given == True
+        OnboardingSessionDoc.tenant_id == tenant_id,
+        OnboardingSessionDoc.consent_given == True,
     ).count()
     active_sessions_24h = await OnboardingSessionDoc.find(
-        OnboardingSessionDoc.updated_at >= day_ago
+        OnboardingSessionDoc.tenant_id == tenant_id,
+        OnboardingSessionDoc.updated_at >= day_ago,
     ).count()
-    admin_count = await User.find(User.role == "admin", User.is_active == True).count()
-    user_count = await User.find(User.role == "user", User.is_active == True).count()
+    admin_count = await User.find(
+        User.tenant_id == tenant_id, User.role == "admin", User.is_active == True
+    ).count()
+    user_count = await User.find(
+        User.tenant_id == tenant_id, User.role == "user", User.is_active == True
+    ).count()
 
     completion_rate = round((done_sessions / total_sessions * 100) if total_sessions else 0, 1)
     consent_rate = round((consent_sessions / total_sessions * 100) if total_sessions else 0, 1)
@@ -59,10 +182,12 @@ async def dashboard(_: User = Depends(require_admin)):
         day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
         sess_count = await OnboardingSessionDoc.find(
+            OnboardingSessionDoc.tenant_id == tenant_id,
             OnboardingSessionDoc.created_at >= day_start,
             OnboardingSessionDoc.created_at < day_end,
         ).count()
         brief_count = await Brief.find(
+            Brief.tenant_id == tenant_id,
             Brief.created_at >= day_start,
             Brief.created_at < day_end,
         ).count()
@@ -75,18 +200,28 @@ async def dashboard(_: User = Depends(require_admin)):
     sessions_by_stage: dict[str, int] = {}
     for stage in ["greeting", "consent", "identity", "requirements", "clarify", "summarise"]:
         sessions_by_stage[stage] = await OnboardingSessionDoc.find(
-            OnboardingSessionDoc.stage == stage
+            OnboardingSessionDoc.tenant_id == tenant_id,
+            OnboardingSessionDoc.stage == stage,
+            OnboardingSessionDoc.done == False,
         ).count()
+    sessions_by_stage["completed"] = done_sessions
     project_types: dict[str, int] = {}
     sessions = await OnboardingSessionDoc.find(
-        OnboardingSessionDoc.project_type != None
+        OnboardingSessionDoc.tenant_id == tenant_id,
+        OnboardingSessionDoc.project_type != None,
     ).to_list()
     for s in sessions:
         pt = s.project_type or "unknown"
         project_types[pt] = project_types.get(pt, 0) + 1
-    recent = await OnboardingSessionDoc.find().sort(-OnboardingSessionDoc.updated_at).limit(20).to_list()
+    recent = await OnboardingSessionDoc.find(
+        OnboardingSessionDoc.tenant_id == tenant_id
+    ).sort(-OnboardingSessionDoc.updated_at).limit(20).to_list()
+    total_roles = await Role.find(Role.is_active == True).count()
+    total_modules = await ApplicationModule.find(ApplicationModule.is_active == True).count()
+    smtp_configured = await SmtpConfig.find_one(SmtpConfig.tenant_id == tenant_id) is not None
     return {
         "total_users": total_users,
+        "total_users_active": total_users_active,
         "active_users_7d": active_users,
         "new_users_7d": new_users_7d,
         "total_sessions": total_sessions,
@@ -101,12 +236,77 @@ async def dashboard(_: User = Depends(require_admin)):
         "activity_by_day": activity_by_day,
         "sessions_by_stage": sessions_by_stage,
         "project_types": project_types,
-        "recent_sessions": [s.to_summary() for s in recent],
-        "ollama": check_ollama_health(),
+        "recent_sessions": await _enrich_session_summaries(recent),
+        "ollama": check_ollama_health(tenant_id),
         "agent_metrics": metrics.summary(),
-        "avg_turns_to_brief": _avg_turns_to_brief(done_sessions, total_sessions),
+        "avg_turns_to_brief": _avg_turns_to_brief(),
         "drop_off_by_stage": sessions_by_stage,
+        "total_roles": total_roles,
+        "total_modules": total_modules,
+        "smtp_configured": smtp_configured,
     }
+
+
+@router.get("/reports/export")
+async def export_reports(
+    request: Request,
+    admin: User = Depends(require_permission("Reports", "Reports", "view")),
+    from_date: str | None = Query(default=None),
+    to_date: str | None = Query(default=None),
+):
+    tenant_id = _tenant_id(admin, request)
+    sessions = await OnboardingSessionDoc.find(
+        OnboardingSessionDoc.tenant_id == tenant_id
+    ).sort(-OnboardingSessionDoc.created_at).to_list()
+    if from_date:
+        try:
+            start = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            sessions = [s for s in sessions if s.created_at >= start]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid from_date")
+    if to_date:
+        try:
+            end = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
+            sessions = [s for s in sessions if s.created_at <= end]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid to_date")
+
+    all_users = await User.find_all().to_list()
+    email_by_id = {str(u.id): u.email for u in all_users}
+
+    session_ids = [s.session_id for s in sessions]
+    brief_session_ids = set()
+    if session_ids:
+        all_briefs = await Brief.find_all().to_list()
+        brief_session_ids = {b.session_id for b in all_briefs if b.session_id in session_ids}
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "session_id", "user_email", "stage", "project_type",
+        "created_at", "completed", "brief_generated",
+    ])
+    for s in sessions:
+        writer.writerow([
+            s.session_id,
+            email_by_id.get(s.user_id, ""),
+            s.stage,
+            s.project_type or "",
+            s.created_at.isoformat(),
+            s.done,
+            s.session_id in brief_session_ids,
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=sessions_export.csv"},
+    )
 
 
 @router.get("/users")
@@ -224,7 +424,7 @@ async def list_sessions(
 
     total = len(docs)
     page = docs[skip : skip + limit]
-    return {"sessions": [s.to_summary() for s in page], "total": total}
+    return {"sessions": await _enrich_session_summaries(page), "total": total}
 
 
 @router.get("/sessions/{session_id}")

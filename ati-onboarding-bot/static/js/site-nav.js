@@ -82,7 +82,7 @@ function renderSiteNav(mount, user, activePage, compact) {
     } else if (typeof API !== "undefined") {
       await API.post("/api/auth/logout", {});
     }
-    window.location.href = "/login.html";
+    window.location.replace("/login.html");
   });
 }
 
@@ -113,13 +113,18 @@ async function initSiteNav() {
 
   const activePage = document.body.dataset.page || "";
   const compact = document.body.dataset.navCompact === "true";
+  const isAuthPage = /\/(login|register)\.html$/i.test(window.location.pathname);
 
-  const cached = typeof readCachedAuthUser === "function" ? readCachedAuthUser() : null;
-  if (cached) {
-    renderSiteNav(mount, cached, activePage, compact);
+  if (!isAuthPage) {
+    const cached = typeof readCachedAuthUser === "function" ? readCachedAuthUser() : null;
+    if (cached) {
+      renderSiteNav(mount, cached, activePage, compact);
+    }
   }
 
-  const user = await resolveNavUser();
+  const user = typeof fetchSessionUser === "function"
+    ? await fetchSessionUser()
+    : await resolveNavUser();
   renderSiteNav(mount, user, activePage, compact);
 }
 
