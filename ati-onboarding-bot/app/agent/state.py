@@ -13,6 +13,8 @@ class OnboardingState(TypedDict):
     summary_written: bool
     session_id: str
     file_context: str
+    url_context: str
+    surfed_urls: list[str]
     ref_id: str | None
     pending_reply: str
     done: bool
@@ -56,6 +58,8 @@ def default_state() -> OnboardingState:
         "summary_written": False,
         "session_id": "",
         "file_context": "",
+        "url_context": "",
+        "surfed_urls": [],
         "ref_id": None,
         "pending_reply": "",
         "done": False,

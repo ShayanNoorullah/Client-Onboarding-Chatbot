@@ -13,6 +13,8 @@ class SystemConfig(Document):
     phone: str = ""
     max_upload_size_mb: int = 50
     max_files_per_session: int = 20
+    surf_enabled: bool = True
+    max_urls_per_session: int = 5
     email_notifications_enabled: bool = True
     follow_up_enabled: bool = True
     notification_to_emails: list[str] = Field(default_factory=list)
@@ -39,6 +41,8 @@ class SystemConfig(Document):
             "phone": self.phone,
             "max_upload_size_mb": self.max_upload_size_mb,
             "max_files_per_session": self.max_files_per_session,
+            "surf_enabled": self.surf_enabled,
+            "max_urls_per_session": self.max_urls_per_session,
             "email_notifications_enabled": self.email_notifications_enabled,
             "follow_up_enabled": self.follow_up_enabled,
             "notification_to_emails": self.notification_to_emails,

@@ -485,6 +485,7 @@ Use this after a fresh install or deployment:
 - [ ] System Config: management recipients set
 - [ ] Register test user → `welcome` email received
 - [ ] Complete test brief → `brief_ready` + `brief_submitted_admin` emails
+- [ ] Paste an HTTPS reference URL in chat → **Research link** → agent summarizes page (after consent)
 - [ ] Webhook test delivery shows `delivered` (if configured)
 - [ ] `pytest tests/ -v` — all tests pass
 
@@ -504,6 +505,10 @@ pytest tests/ -v
 | `ENCRYPTION_KEY` errors on SMTP save | Generate Fernet key — Section 2 |
 | Admin pages 404 for new routes | Restart with `--reload` or full restart |
 | Stale JS/CSS | Hard refresh (Ctrl+Shift+R); check `?v=` on script tags |
+
+### Privacy & URL research
+
+Reference links are fetched **only after consent** and **only over HTTPS** to public hosts (private IPs and localhost are blocked). Snapshots are saved to the client workspace and indexed for RAG — not stored as raw HTML in MongoDB. Disable via **Configuration → System Configuration → Allow reference link research**.
 
 ### Ollama / chat
 

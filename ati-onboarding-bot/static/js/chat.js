@@ -7,8 +7,34 @@ let waiting = false;
 let consentGiven = false;
 let sessionSearchTerm = "";
 let sessionSearchTimer = null;
+let surfing = false;
 
+const URL_DETECT_RE = /https?:\/\/[^\s<>\"')\]]+/gi;
 const CONSENT_PHRASE = "i agree";
+
+function extractUrls(text) {
+  return [...new Set((text || "").match(URL_DETECT_RE) || [])];
+}
+
+function updateUrlSurfBar() {
+  const bar = document.getElementById("urlSurfBar");
+  const input = document.getElementById("messageInput");
+  if (!bar || !input) return;
+  const urls = extractUrls(input.value);
+  if (!urls.length || !consentGiven) {
+    bar.classList.add("d-none");
+    bar.innerHTML = "";
+    return;
+  }
+  bar.classList.remove("d-none");
+  bar.innerHTML = urls.map((url) => {
+    const label = url.length > 52 ? `${url.slice(0, 52)}…` : url;
+    return `<button type="button" class="url-surf-chip" data-url="${encodeURIComponent(url)}">Research link: ${label}</button>`;
+  }).join("");
+  bar.querySelectorAll(".url-surf-chip").forEach((btn) => {
+    btn.addEventListener("click", () => surfUrl(decodeURIComponent(btn.dataset.url)));
+  });
+}
 
 function sessionStorageKey(userId) {
   return `ati_session_id_${userId}`;
@@ -243,6 +269,7 @@ function updateConsentState(data) {
     setTimeout(() => document.getElementById("consentInput")?.focus(), 50);
   }
   setSendEnabled(ws?.readyState === WebSocket.OPEN && consentGiven && !waiting);
+  if (consentGiven) updateUrlSurfBar();
 }
 
 async function loadConsentContent() {
@@ -677,6 +704,33 @@ async function uploadFile(file) {
   sendMessage(`I uploaded ${data.filename}. ${data.description_preview || ""}`);
 }
 
+async function surfUrl(url) {
+  if (!sessionId || !url || surfing) return;
+  surfing = true;
+  const bar = document.getElementById("urlSurfBar");
+  bar?.classList.add("url-surf-loading");
+  try {
+    const res = await fetch(`/surf/${sessionId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Could not research URL");
+    appendMessage("system", `Researched: ${data.title || data.url}`);
+    if (data.agent_message) {
+      appendMessage("assistant", data.agent_message);
+    }
+  } catch (e) {
+    alert(e.message || "URL research failed");
+  } finally {
+    surfing = false;
+    bar?.classList.remove("url-surf-loading");
+    updateUrlSurfBar();
+  }
+}
+
 function isFreshLogin() {
   try {
     if (sessionStorage.getItem("ati_fresh_login") === "1") return true;
@@ -832,7 +886,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     sendMessage(input.value);
     input.value = "";
   });
-  input?.addEventListener("input", () => setSendEnabled(ws?.readyState === WebSocket.OPEN));
+  input?.addEventListener("input", () => {
+    setSendEnabled(ws?.readyState === WebSocket.OPEN);
+    updateUrlSurfBar();
+  });
 
   document.getElementById("fileInput")?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];

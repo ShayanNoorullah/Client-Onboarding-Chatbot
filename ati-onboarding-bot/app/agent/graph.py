@@ -37,6 +37,10 @@ graph.add_edge("summarise", END)
 compiled_graph = graph.compile()
 
 
+def _has_pending_context(state: OnboardingState) -> bool:
+    return bool(state.get("file_context") or state.get("url_context"))
+
+
 def run_agent_step(state: OnboardingState) -> OnboardingState:
     """Run one step of the agent based on current stage."""
     stage = state.get("stage", "greeting")
@@ -48,7 +52,7 @@ def run_agent_step(state: OnboardingState) -> OnboardingState:
     if stage == "identity":
         return identity_node(state)
     if stage == "requirements":
-        if state.get("file_context"):
+        if _has_pending_context(state):
             return clarify_node(state)
         return requirements_node(state)
     if stage == "clarify":
@@ -91,7 +95,7 @@ def _reopen_completed_session(state: OnboardingState) -> None:
     state["brief_update_pending"] = True
     state["auto_summarising"] = False
     state["manual_brief_requested"] = False
-    if state.get("file_context"):
+    if state.get("file_context") or state.get("url_context"):
         state["stage"] = "clarify"
     else:
         state["stage"] = "requirements"
@@ -112,7 +116,7 @@ def process_message(state: OnboardingState, user_message: str) -> OnboardingStat
 
     if state.get("done"):
         _reopen_completed_session(state)
-        if state.get("file_context"):
+        if _has_pending_context(state):
             state = clarify_node(state)
         else:
             state = requirements_node(state)
@@ -128,7 +132,7 @@ def process_message(state: OnboardingState, user_message: str) -> OnboardingStat
     if stage == "requirements":
         if should_summarise(state, user_message):
             return summarise_node(state)
-        if state.get("file_context"):
+        if _has_pending_context(state):
             state = clarify_node(state)
         else:
             state = requirements_node(state)

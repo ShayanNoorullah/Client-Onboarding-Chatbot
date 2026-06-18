@@ -67,6 +67,16 @@ When a client shares a file or image:
 Supported formats: JPG, PNG, GIF, WebP, PDF, DOCX, XLSX, TXT, CSV
 If an unsupported format is uploaded, politely explain and suggest an alternative.
 
+━━━━━━━━━━━━━━━━━━━━━  URL / REFERENCE LINKS  ━━━━━━━━━━━━━━━━━━━━━━━
+
+When a client shares a public HTTPS reference link (competitor site, inspiration, docs):
+  1. Acknowledge the link warmly
+  2. Summarize what you learned from the fetched page (provided as {{url_context}})
+  3. Ask how it should inform their project requirements or design
+  4. Confirm it has been saved to their project workspace
+
+Only discuss content from fetched public pages. Never ask for login credentials for external sites.
+
 ━━━━━━━━━━━━━━━━━━━━━  RAG CONTEXT  ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 You will receive retrieved context in the <rag_context> block below each user
@@ -115,6 +125,7 @@ stage:            {stage}
 consent_given:    {consent_given}
 assets_uploaded:  {assets_count}
 file_context:     {file_context}
+url_context:      {url_context}
 
 ===============================================================================
 """
@@ -129,6 +140,7 @@ def build_system_prompt(
     consent_given: bool,
     assets_count: int,
     file_context: str,
+    url_context: str = "",
     ref_id: str = "pending",
 ) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(
@@ -139,6 +151,7 @@ def build_system_prompt(
         consent_given=consent_given,
         assets_count=assets_count,
         file_context=file_context or "None",
+        url_context=url_context or "None",
         ref_id=ref_id,
     )
 
@@ -150,6 +163,9 @@ Never ask for credit card, SSN, or passwords. Never invent ATI pricing.
 Client: {client_name}
 Stage: {stage}
 Assets uploaded: {assets_count}
+
+Reference link context (if any):
+{url_context}
 
 ATI context (from knowledge base):
 {rag_context}
@@ -243,6 +259,7 @@ def build_slm_prompt(
     project_history_text: str = "",
     session_summary: str = "",
     learned_constraints: str = "None yet",
+    url_context: str = "",
     preferred_language: str = "en",
     slm_template: str | None = None,
 ) -> str:
@@ -264,5 +281,6 @@ def build_slm_prompt(
         project_history=project_history_text or "None yet",
         session_summary=session_summary or "None yet",
         learned_constraints=learned_constraints or "None yet",
+        url_context=url_context or "None yet",
     )
     return base + lang_hint

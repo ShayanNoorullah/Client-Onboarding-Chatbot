@@ -7,12 +7,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
+from app.api.schemas import SurfUrlRequest
+
 from app.agent.graph import process_message, request_manual_brief, run_agent_step
 from app.agent.field_extractor import merge_collected_requirements
 from app.agent.session_memory import maybe_update_session_summary
 from app.agent.term_glossary import expand_terms
 from app.agent.routing import can_request_manual_brief
-from app.agent.nodes import greeting_node, is_modal_consent_phrase, proactive_clarify_after_upload, record_modal_consent
+from app.agent.nodes import greeting_node, is_modal_consent_phrase, proactive_clarify_after_upload, proactive_clarify_after_surf, record_modal_consent
 from app.agent.task_router import get_suggestions
 from app.auth.dependencies import get_current_user, get_ws_user
 from app.config import settings
@@ -44,6 +46,7 @@ router = APIRouter()
 _agent_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ati-agent")
 _session_upload_counts: dict[str, int] = {}
 _session_upload_sizes: dict[str, int] = {}
+_session_surf_counts: dict[str, int] = {}
 
 
 def _run_agent_step_sync(session_id: str, user_message: str | None = None) -> dict:
@@ -444,5 +447,97 @@ async def upload_file(
         "filename": saved_path.name,
         "processing_type": proc_type,
         "description_preview": extracted[:200],
+        "agent_message": agent_message,
+    }
+
+
+@router.post("/surf/{session_id}")
+async def surf_url(
+    session_id: str,
+    body: SurfUrlRequest,
+    user: User = Depends(get_current_user),
+):
+    from datetime import datetime, timezone
+
+    from app.agent.nodes import _ensure_project_workspace
+    from app.services.system_config_service import get_effective_settings
+    from app.services.url_fetch_service import UrlFetchError, fetch_page_text
+
+    try:
+        state = await mongo_session_store.get(session_id, str(user.id))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not your session")
+
+    if not state.get("consent_given"):
+        raise HTTPException(status_code=403, detail="Consent required before researching URLs")
+    if not state.get("client_name"):
+        raise HTTPException(status_code=400, detail="Client name required")
+
+    tenant_id = state.get("tenant_id", user.tenant_id or "default")
+    sys_cfg = await get_effective_settings(tenant_id)
+    if not sys_cfg.get("surf_enabled", True):
+        raise HTTPException(status_code=403, detail="URL research is disabled for this workspace")
+
+    max_urls = int(sys_cfg.get("max_urls_per_session", 5))
+    surfed = state.get("surfed_urls") or []
+    url_count = _session_surf_counts.get(session_id, len(surfed))
+    if url_count >= max_urls:
+        raise HTTPException(status_code=400, detail=f"Maximum {max_urls} URLs per session")
+
+    try:
+        result = await fetch_page_text(body.url)
+    except UrlFetchError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    _ensure_project_workspace(state)
+    await mongo_session_store.update(session_id, state)
+    client_folder = get_project_folder_from_state(state)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    snapshot_name = f"surf_{timestamp}.txt"
+    snapshot_body = f"URL: {result.final_url}\nTitle: {result.title}\n\n{result.text[:50000]}"
+    saved_path = save_asset(client_folder, snapshot_name, snapshot_body.encode("utf-8"))
+
+    collection = f"project_{state.get('workspace_slug') or sanitise_name(state['client_name'])}"
+    embed_text(
+        result.text[:20000],
+        collection,
+        client_folder / "vectors",
+        metadata={"source": result.final_url, "type": "url_surf", "title": result.title},
+    )
+
+    if "surfed_urls" not in state or state["surfed_urls"] is None:
+        state["surfed_urls"] = []
+    state["surfed_urls"].append(result.final_url)
+    state["assets"].append(str(saved_path))
+    state["asset_descriptions"][str(saved_path)] = f"Reference URL: {result.title}"[:500]
+    state["url_context"] = (
+        f"URL: {result.final_url}\nTitle: {result.title}\nContent: {result.text[:2000]}"
+    )
+    await mongo_session_store.update(session_id, state)
+
+    agent_message = None
+    try:
+        loop = asyncio.get_running_loop()
+
+        def _clarify():
+            s = mongo_session_store.get_sync(session_id)
+            s = proactive_clarify_after_surf(s)
+            mongo_session_store.update_sync(session_id, s)
+            return s.get("pending_reply", "")
+
+        agent_message = await asyncio.wait_for(loop.run_in_executor(_agent_executor, _clarify), timeout=90.0)
+    except Exception:
+        logger.exception("Proactive clarify after URL surf failed")
+
+    _session_surf_counts[session_id] = url_count + 1
+
+    return {
+        "status": "saved",
+        "url": result.final_url,
+        "title": result.title,
+        "description_preview": result.text[:200],
         "agent_message": agent_message,
     }

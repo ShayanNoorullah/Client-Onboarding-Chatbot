@@ -125,6 +125,10 @@ class SmtpTestRequest(BaseModel):
     test_email: EmailStr
 
 
+class SurfUrlRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+
+
 class SystemConfigUpdate(BaseModel):
     product_name: str | None = None
     support_email: str | None = None
@@ -132,6 +136,8 @@ class SystemConfigUpdate(BaseModel):
     phone: str | None = None
     max_upload_size_mb: int | None = None
     max_files_per_session: int | None = None
+    surf_enabled: bool | None = None
+    max_urls_per_session: int | None = None
     email_notifications_enabled: bool | None = None
     follow_up_enabled: bool | None = None
     notification_to_emails: list[str] | None = None

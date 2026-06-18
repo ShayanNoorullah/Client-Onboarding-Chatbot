@@ -24,6 +24,10 @@ async function loadSystemConfig() {
   });
   document.getElementById("emailNotif").checked = c.email_notifications_enabled !== false;
   document.getElementById("followUp").checked = c.follow_up_enabled !== false;
+  document.getElementById("surfEnabled").checked = c.surf_enabled !== false;
+  if (document.getElementById("maxUrls")) {
+    document.getElementById("maxUrls").value = c.max_urls_per_session ?? 5;
+  }
   document.getElementById("notifTo").value = formatEmailList(c.notification_to_emails);
   document.getElementById("notifCc").value = formatEmailList(c.notification_cc_emails);
   if (document.getElementById("defaultLang")) {
@@ -40,6 +44,9 @@ async function saveSystemConfig() {
   });
   body.email_notifications_enabled = document.getElementById("emailNotif").checked;
   body.follow_up_enabled = document.getElementById("followUp").checked;
+  body.surf_enabled = document.getElementById("surfEnabled").checked;
+  const maxUrlsEl = document.getElementById("maxUrls");
+  if (maxUrlsEl) body.max_urls_per_session = +maxUrlsEl.value;
   body.notification_to_emails = parseEmailList(document.getElementById("notifTo").value);
   body.notification_cc_emails = parseEmailList(document.getElementById("notifCc").value);
   const langEl = document.getElementById("defaultLang");

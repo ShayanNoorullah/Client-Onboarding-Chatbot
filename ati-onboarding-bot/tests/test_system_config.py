@@ -7,6 +7,8 @@ def test_env_defaults_has_branding_fields():
     assert "product_name" in defaults
     assert defaults["product_name"] == "Client Onboarding Agent"
     assert "max_upload_size_mb" in defaults
+    assert defaults.get("surf_enabled") is True
+    assert defaults.get("max_urls_per_session") == 5
 
 
 def test_system_config_to_dict():

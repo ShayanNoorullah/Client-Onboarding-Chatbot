@@ -665,6 +665,7 @@ Hard-coded limits (`app/config.py`):
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/upload/{session_id}` | Upload file (requires consent + name) |
+| POST | `/surf/{session_id}` | Fetch public HTTPS reference URL (requires consent + name) |
 | GET | `/client/{name}/summary` | Return `summary.md` text |
 | GET | `/client/{name}/assets` | List uploaded asset filenames |
 | DELETE | `/client/{name}` | Delete entire client folder |
@@ -677,6 +678,16 @@ Hard-coded limits (`app/config.py`):
 4. Embed extracted text into per-client ChromaDB collection
 5. Set `file_context` in session for clarify stage
 6. Return filename, processing type, description preview
+
+**URL research (surf) pipeline:**
+
+1. Validate `surf_enabled`, consent, client name, per-session URL limit
+2. SSRF-safe HTTPS fetch (`url_fetch_service`) — blocks private/loopback hosts
+3. Extract readable text (BeautifulSoup); save `surf_{timestamp}.txt` snapshot
+4. Embed into session Chroma vectors; set `url_context` for clarify stage
+5. Agent proactively summarizes the page and asks how it informs the project
+
+Configure in **Configuration → System Configuration** (`surf_enabled`, `max_urls_per_session`).
 
 ---
 

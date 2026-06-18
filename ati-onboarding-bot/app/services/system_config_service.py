@@ -16,6 +16,8 @@ def _env_defaults() -> dict[str, Any]:
         "phone": settings.ATI_PHONE,
         "max_upload_size_mb": settings.MAX_UPLOAD_SIZE_MB,
         "max_files_per_session": settings.MAX_FILES_PER_SESSION,
+        "surf_enabled": True,
+        "max_urls_per_session": 5,
         "email_notifications_enabled": True,
         "follow_up_enabled": True,
         "notification_to_emails": [],

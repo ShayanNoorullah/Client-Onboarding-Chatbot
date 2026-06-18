@@ -85,7 +85,7 @@ def route_after_requirements(state: OnboardingState) -> str:
     last_user = _last_user_message(state)
     if last_user and is_done_message(last_user):
         return "summarise"
-    if state.get("file_context"):
+    if state.get("file_context") or state.get("url_context"):
         return "clarify"
     return "requirements"
 

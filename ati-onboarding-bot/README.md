@@ -10,6 +10,7 @@ AI-powered client onboarding for **Awesome Technologies Inc.** — login-first, 
 - **Six-stage onboarding** — greeting, consent, identity, requirements, clarify, summarise
 - **SLM-driven consent** and **intelligent completion detection** (readiness score + missing fields)
 - **File uploads** (PDF, DOCX, images, XLSX, TXT) with RAG indexing and vision description
+- **Reference URL research** — paste HTTPS links; agent fetches public page text and uses it in requirements (after consent)
 - **Downloadable briefs** (`.md` and PDF export support)
 - **User preferences** and per-user learning memory
 - **Feedback loop** — per-message thumbs, brief ratings, shadow prompt validation (see [SELF_LEARNING.md](SELF_LEARNING.md))
@@ -85,7 +86,7 @@ Configure in the admin UI (not `.env`). See **[SETUP.md — Section 6 & 7](SETUP
 |------|-------------------|
 | Auth | `POST /api/auth/register`, `/login`, `/logout`, `GET /me`, Google OAuth |
 | User | `GET/PUT /api/user/profile`, `/preferences`, `POST/GET /api/user/sessions`, `/briefs` |
-| Chat | `WS /ws/chat/{id}`, `POST /upload/{id}` |
+| Chat | `WS /ws/chat/{id}`, `POST /upload/{id}`, `POST /surf/{id}` |
 | Briefs | `GET /api/briefs`, `/{id}/download`, `/{id}/feedback` |
 | Admin | `GET /api/admin/dashboard`, CRUD `/users`, `/sessions`, `/briefs`, `/reports/export` |
 | Config | `GET/PUT /api/admin/config/ai`, `/system`, `/smtp`, `/email-templates`, `/follow-up-rules` |

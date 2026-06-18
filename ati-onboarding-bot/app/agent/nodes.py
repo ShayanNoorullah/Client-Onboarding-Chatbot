@@ -111,6 +111,7 @@ def _invoke_llm(state: OnboardingState, user_input: str | None = None) -> str:
         project_history_text=_format_project_history(state),
         session_summary=state.get("session_summary", ""),
         learned_constraints=state.get("learned_constraints", "None yet"),
+        url_context=state.get("url_context", ""),
         slm_template=state.get("slm_prompt_template"),
     )
     state["last_rag_context"] = rag_context
@@ -164,6 +165,7 @@ def build_llm_messages(state: OnboardingState, user_input: str | None = None) ->
         project_history_text=_format_project_history(state),
         session_summary=state.get("session_summary", ""),
         learned_constraints=state.get("learned_constraints", "None yet"),
+        url_context=state.get("url_context", ""),
         slm_template=state.get("slm_prompt_template"),
     )
     state["last_rag_context"] = rag_context
@@ -440,6 +442,7 @@ def requirements_node(state: OnboardingState) -> OnboardingState:
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
     state["file_context"] = ""
+    state["url_context"] = ""
     return state
 
 
@@ -448,9 +451,12 @@ def clarify_node(state: OnboardingState) -> OnboardingState:
     last_user = _last_user_text(state)
 
     file_ctx = state.get("file_context", "")
-    prompt = last_user or "The client just uploaded a file."
+    url_ctx = state.get("url_context", "")
+    prompt = last_user or "The client just shared new project material."
     if file_ctx:
         prompt = f"{prompt}\n\n[Uploaded file context]: {file_ctx}"
+    if url_ctx:
+        prompt = f"{prompt}\n\n[Reference link context]: {url_ctx}"
 
     if last_user:
         merge_collected_requirements(state, last_user)
@@ -461,6 +467,7 @@ def clarify_node(state: OnboardingState) -> OnboardingState:
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
     state["file_context"] = ""
+    state["url_context"] = ""
     return state
 
 
@@ -573,6 +580,25 @@ def proactive_clarify_after_upload(state: OnboardingState) -> OnboardingState:
     state["pending_reply"] = reply
     _append_message(state, "assistant", reply)
     state["file_context"] = ""
+    return state
+
+
+def proactive_clarify_after_surf(state: OnboardingState) -> OnboardingState:
+    """Generate assistant reply after URL research without user message."""
+    state["stage"] = "clarify"
+    state["requirements_turn_count"] = state.get("requirements_turn_count", 0) + 1
+    url_ctx = state.get("url_context", "")
+    prompt = (
+        "I shared a reference link. Please summarize what you learned from the page "
+        "and ask how it should inform my project.\n\n"
+        f"[Reference link context]: {url_ctx}"
+    )
+    state["messages"].append({"role": "user", "content": "I shared a reference link for review."})
+    reply = _invoke_llm(state, expand_terms(prompt))
+    _evaluate_readiness(state)
+    state["pending_reply"] = reply
+    _append_message(state, "assistant", reply)
+    state["url_context"] = ""
     return state
 
 

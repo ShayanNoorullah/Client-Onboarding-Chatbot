@@ -1072,6 +1072,24 @@ html[data-chat-density="compact"] .typing-row {
   padding: 2px 4px;
 }
 .msg-thumb:hover { opacity: 1; }
+.url-surf-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 0;
+}
+.url-surf-bar.url-surf-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.url-surf-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  cursor: pointer;
+}
 .streaming-bubble::after {
   content: '';
   display: inline-block;
